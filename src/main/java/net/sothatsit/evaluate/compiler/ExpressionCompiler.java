@@ -5,7 +5,7 @@ import jdk.internal.org.objectweb.asm.MethodVisitor;
 import static jdk.internal.org.objectweb.asm.Opcodes.*;
 
 import jdk.internal.org.objectweb.asm.Type;
-import net.sothatsit.evaluate.Expression;
+import net.sothatsit.evaluate.tree.Expression;
 import net.sothatsit.evaluate.parser.ExpressionParser;
 import net.sothatsit.evaluate.tree.ConstantNode;
 import net.sothatsit.evaluate.tree.FunctionNode;

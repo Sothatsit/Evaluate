@@ -1,6 +1,5 @@
-package net.sothatsit.evaluate;
+package net.sothatsit.evaluate.tree;
 
-import net.sothatsit.evaluate.tree.Node;
 import net.sothatsit.evaluate.tree.function.Function;
 
 import java.util.ArrayList;

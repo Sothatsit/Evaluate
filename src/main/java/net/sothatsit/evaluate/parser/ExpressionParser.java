@@ -1,6 +1,6 @@
 package net.sothatsit.evaluate.parser;
 
-import net.sothatsit.evaluate.Expression;
+import net.sothatsit.evaluate.tree.Expression;
 import net.sothatsit.evaluate.tree.ConstantNode;
 import net.sothatsit.evaluate.tree.FunctionNode;
 import net.sothatsit.evaluate.tree.Node;
