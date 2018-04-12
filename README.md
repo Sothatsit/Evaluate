@@ -1,6 +1,7 @@
 About
 -----
-A library to efficiently parse, optimise, compile and evaluate string expressions. 
+A library to efficiently parse, optimise, compile and evaluate arbitrary 
+string expressions at runtime. 
 
 **Note:** The optimisation steps of this library do not ensure complete 
 floating point equivalence between the original and optimised expressions, 
