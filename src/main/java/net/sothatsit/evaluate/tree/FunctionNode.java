@@ -3,10 +3,13 @@ package net.sothatsit.evaluate.tree;
 import net.sothatsit.evaluate.tree.function.Function;
 import net.sothatsit.evaluate.tree.function.operator.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class FunctionNode implements Node {
 
-    private final Function function;
-    private final Node[] arguments;
+    public final Function function;
+    public final Node[] arguments;
 
     public FunctionNode(Function function, Node... arguments) {
         if(arguments.length != function.getArgumentCount())
@@ -25,6 +28,23 @@ public class FunctionNode implements Node {
         }
 
         return true;
+    }
+
+    public List<Function> getAllUsedFunctions() {
+        List<Function> functions = new ArrayList<>();
+
+        functions.add(function);
+
+        for(Node argument : arguments) {
+            for(Function function : argument.getAllUsedFunctions()) {
+                if(functions.contains(function))
+                    continue;
+
+                functions.add(function);
+            }
+        }
+
+        return functions;
     }
 
     public double evaluate(double... inputs) {

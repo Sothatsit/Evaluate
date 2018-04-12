@@ -1,5 +1,10 @@
 package net.sothatsit.evaluate.tree;
 
+import net.sothatsit.evaluate.tree.function.Function;
+
+import java.util.Collections;
+import java.util.List;
+
 public class VariableNode implements Node {
 
     public final String name;
@@ -12,6 +17,10 @@ public class VariableNode implements Node {
 
     public boolean isConstant() {
         return false;
+    }
+
+    public List<Function> getAllUsedFunctions() {
+        return Collections.emptyList();
     }
 
     public double evaluate(double... inputs) {

@@ -8,7 +8,7 @@ public interface Token {
     public boolean isOperator();
 
     public Node getNode();
-    public Operator getOperator();
+    public BaseOperator getOperator();
 
     public static class NodeToken implements Token {
 
@@ -25,16 +25,16 @@ public interface Token {
             return node;
         }
 
-        public Operator getOperator() {
+        public BaseOperator getOperator() {
             throw new UnsupportedOperationException("This is not an operator token");
         }
     }
 
     public static class OperatorToken implements Token {
 
-        public final Operator operator;
+        public final BaseOperator operator;
 
-        public OperatorToken(Operator operator) {
+        public OperatorToken(BaseOperator operator) {
             this.operator = operator;
         }
 
@@ -45,7 +45,7 @@ public interface Token {
             throw new UnsupportedOperationException("This is not a node token");
         }
 
-        public Operator getOperator() {
+        public BaseOperator getOperator() {
             return operator;
         }
     }

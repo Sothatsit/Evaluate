@@ -1,5 +1,6 @@
 package net.sothatsit.evaluate.parser;
 
+import net.sothatsit.evaluate.Expression;
 import net.sothatsit.evaluate.tree.ConstantNode;
 import net.sothatsit.evaluate.tree.FunctionNode;
 import net.sothatsit.evaluate.tree.Node;
@@ -11,36 +12,42 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class FunctionParser {
+public class ExpressionParser {
 
     public static void main(String[] args) {
-        FunctionParser parser = new FunctionParser();
+        ExpressionParser parser = new ExpressionParser();
 
         String equation = "3 * (1 * 2 * 3 * 4 * (e + 3 + 2 - 4)) + 1 + (c + 2 + e^(4*3+2^7) * 3)";
 
-        Node expression = parser.parse(equation);
-        Node simplified = parser.parse(equation).trySimplify();
+        Node expression = parser.parseNode(equation);
+        Node simplified = parser.parseNode(equation).trySimplify();
 
         System.out.println(expression);
         System.out.println(simplified);
     }
 
     private final Map<String, Function> functions = new HashMap<>();
-    private final Map<String, Integer> variables = new HashMap<>();
+    private final List<String> arguments = new ArrayList<>();
 
     public void addFunction(String identifier, Function function) {
         functions.put(identifier, function);
     }
 
-    private int getVariableIndex(String name) {
-        if(!variables.containsKey(name)) {
-            variables.put(name, variables.size());
+    private int getArgumentIndex(String name) {
+        if(!arguments.contains(name)) {
+            arguments.add(name);
         }
 
-        return variables.get(name);
+        return arguments.indexOf(name);
     }
 
-    public Node parse(String equation) {
+    public Expression parse(String equation) {
+        Node root = Node.simplifyOrItself(parseNode(equation));
+
+        return new Expression(root, arguments);
+    }
+
+    private Node parseNode(String equation) {
         List<Token> tokens = tokenize(equation);
 
         if(tokens.size() == 0)
@@ -48,7 +55,7 @@ public class FunctionParser {
 
         while(true) {
             int operatorIndex = -1;
-            Operator operator = null;
+            BaseOperator operator = null;
 
             for(int index = 0; index < tokens.size(); ++index) {
                 Token token = tokens.get(index);
@@ -56,7 +63,7 @@ public class FunctionParser {
                 if(!token.isOperator())
                     continue;
 
-                Operator possibleOperator = token.getOperator();
+                BaseOperator possibleOperator = token.getOperator();
 
                 if(operator == null || possibleOperator.precedence > operator.precedence) {
                     operatorIndex = index;
@@ -87,7 +94,6 @@ public class FunctionParser {
         if(tokens.size() > 1)
             throw new IllegalArgumentException("Missing operator");
 
-
         return tokens.get(0).getNode();
     }
 
@@ -101,7 +107,7 @@ public class FunctionParser {
                 String brackets = extractBrackets(equation, index);
                 index += brackets.length() + 1;
 
-                Node subExpression = parse(brackets);
+                Node subExpression = parseNode(brackets);
 
                 tokens.add(new Token.NodeToken(subExpression));
                 continue;
@@ -127,6 +133,8 @@ public class FunctionParser {
                 index -= 1;
 
                 if(functions.containsKey(identifier) && equation.charAt(index + 1) == '(') {
+                    index += 1;
+
                     String brackets = extractBrackets(equation, index);
 
                     Function function = functions.get(identifier);
@@ -134,18 +142,19 @@ public class FunctionParser {
                     FunctionNode node = new FunctionNode(function, arguments);
 
                     index += brackets.length();
+                    index += 1;
 
                     tokens.add(new Token.NodeToken(node));
                     continue;
                 }
 
-                int variableIndex = getVariableIndex(identifier);
+                int variableIndex = getArgumentIndex(identifier);
 
                 tokens.add(new Token.NodeToken(new VariableNode(identifier, variableIndex)));
                 continue;
             }
 
-            Operator operator = Operator.find(character);
+            BaseOperator operator = BaseOperator.find(character);
 
             if(operator != null) {
                 tokens.add(new Token.OperatorToken(operator));
@@ -178,7 +187,7 @@ public class FunctionParser {
 
             if(character == ',' && depth == 0) {
                 String argument = brackets.substring(splitFrom, index);
-                Node expression = parse(argument);
+                Node expression = parseNode(argument);
 
                 arguments.add(expression);
 
@@ -187,7 +196,7 @@ public class FunctionParser {
         }
 
         String argument = brackets.substring(splitFrom);
-        Node expression = parse(argument);
+        Node expression = parseNode(argument);
 
         arguments.add(expression);
 

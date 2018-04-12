@@ -1,8 +1,11 @@
 package net.sothatsit.evaluate.tree.function.operator;
 
-import net.sothatsit.evaluate.tree.function.BinaryFunction;
+import jdk.internal.org.objectweb.asm.MethodVisitor;
+import net.sothatsit.evaluate.tree.function.BiOperator;
 
-public class Multiply extends BinaryFunction {
+import static jdk.internal.org.objectweb.asm.Opcodes.DMUL;
+
+public class Multiply extends BiOperator {
 
     public String getName() {
         return "multiply";
@@ -14,5 +17,9 @@ public class Multiply extends BinaryFunction {
 
     public double evaluate(double arg1, double arg2) {
         return arg1 * arg2;
+    }
+
+    public void visitInstructions(MethodVisitor mv) {
+        mv.visitInsn(DMUL);
     }
 }

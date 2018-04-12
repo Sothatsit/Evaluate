@@ -1,6 +1,6 @@
 package net.sothatsit.evaluate.tree.function;
 
-public abstract class BinaryFunction implements Function {
+public abstract class BiOperator implements Operator {
 
     public int getArgumentCount() {
         return 2;
