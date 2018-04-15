@@ -29,8 +29,18 @@ public class ExpressionParser {
     private final Map<String, Function> functions = new HashMap<>();
     private final List<String> arguments = new ArrayList<>();
 
-    public void addFunction(String identifier, Function function) {
-        functions.put(identifier, function);
+    public void addFunction(Function function) {
+        functions.put(function.getName(), function);
+
+        for(String alias : function.getAliases()) {
+            functions.put(alias, function);
+        }
+    }
+
+    public void addFunctions(Function... functions) {
+        for(Function function : functions) {
+            addFunction(function);
+        }
     }
 
     private int getArgumentIndex(String name) {
@@ -132,12 +142,15 @@ public class ExpressionParser {
                 index += identifier.length();
                 index -= 1;
 
-                if(functions.containsKey(identifier) && equation.charAt(index + 1) == '(') {
+                if(index + 1 < equation.length() && equation.charAt(index + 1) == '(') {
                     index += 1;
 
                     String brackets = extractBrackets(equation, index);
-
                     Function function = functions.get(identifier);
+
+                    if(function == null)
+                        throw new IllegalArgumentException("Unknown function " + identifier);
+
                     Node[] arguments = extractFunctionArguments(brackets);
                     FunctionNode node = new FunctionNode(function, arguments);
 

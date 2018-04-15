@@ -11,34 +11,32 @@ import net.sothatsit.evaluate.tree.ConstantNode;
 import net.sothatsit.evaluate.tree.FunctionNode;
 import net.sothatsit.evaluate.tree.Node;
 import net.sothatsit.evaluate.tree.VariableNode;
-import net.sothatsit.evaluate.tree.function.Function;
-import net.sothatsit.evaluate.tree.function.Operator;
+import net.sothatsit.evaluate.tree.function.*;
 
 import java.util.*;
 
 public class ExpressionCompiler {
 
-    private static final String FUNCTION_TYPE_DESC = "L" + Type.getInternalName(Function.class) + ";";
+    private static final String EXPRESSION_TYPE_DESC = "L" + Type.getInternalName(Expression.class) + ";";
 
     public static void main(String[] args) {
         ExpressionParser parser = new ExpressionParser();
-        parser.addFunction("ln", new Function() {
-            public String getName() { return "ln"; }
-            public int getArgumentCount() { return 1; }
-            public boolean isOrderDependant() { return true; }
-
-            public double evaluate(double[] arguments) {
-                return Math.log(arguments[0]);
+        parser.addFunctions(MathFunctions.get());
+        parser.addFunction(new OneArgFunction("apple") {
+            @Override
+            public double evaluate(double arg) {
+                return 2 * arg + 4;
             }
         });
 
-        Expression expression = parser.parse("ln(a) * 3 + 5 * (a + 4)");
+        String eqn = "apple(a) * apple(b)";
+        Expression expression = parser.parse(eqn);
 
         ExpressionCompiler compiler = new ExpressionCompiler();
         CompiledExpression compiled = compiler.compile(expression);
 
         System.out.println(compiled.getClass());
-        double[] inputs = new double[] {Math.E};
+        double[] inputs = new double[] {Math.E, 2 * Math.E};
 
         System.out.println(expression.evaluate(inputs) + " = " + compiled.evaluate(inputs));
 
@@ -88,6 +86,23 @@ public class ExpressionCompiler {
 
     private final ExpressionLoader loader = new ExpressionLoader();
 
+    protected static Class<?> getFunctionReferenceClass(Function function) {
+        if(function instanceof ThreeArgFunction)
+            return ThreeArgFunction.class;
+
+        if(function instanceof TwoArgFunction)
+            return TwoArgFunction.class;
+
+        if(function instanceof OneArgFunction)
+            return OneArgFunction.class;
+
+        else return Function.class;
+    }
+
+    private static String getFunctionDesc(Function function) {
+        return "L" + Type.getInternalName(getFunctionReferenceClass(function)) + ";";
+    }
+
     public CompiledExpression compile(Expression expression) {
         String name = loader.getNextName();
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
@@ -100,7 +115,7 @@ public class ExpressionCompiler {
         { // We don't need to store references to operators
             Iterator<Function> iterator = fields.iterator();
             while(iterator.hasNext()) {
-                if(!(iterator.next() instanceof Operator))
+                if(!(iterator.next() instanceof Compilable))
                     continue;
 
                 iterator.remove();
@@ -108,16 +123,17 @@ public class ExpressionCompiler {
         }
 
         for(Function function : fields) {
-            cw.visitField(ACC_PRIVATE, function.getName(), FUNCTION_TYPE_DESC, null, null).visitEnd();
+            cw.visitField(ACC_PRIVATE, function.getName(), getFunctionDesc(function), null, null).visitEnd();
         }
 
         { // Constructor
             StringBuilder desc = new StringBuilder();
             {
                 desc.append("(");
+                desc.append(EXPRESSION_TYPE_DESC);
 
-                for(int i=0; i < fields.size(); ++i) {
-                    desc.append(FUNCTION_TYPE_DESC);
+                for(Function function : fields) {
+                    desc.append(getFunctionDesc(function));
                 }
 
                 desc.append(")V");
@@ -126,12 +142,15 @@ public class ExpressionCompiler {
             MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", desc.toString(), null, null);
 
             mv.visitVarInsn(ALOAD, 0);
-            mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "()V", false);
+            mv.visitVarInsn(ALOAD, 1);
+            mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "(" + EXPRESSION_TYPE_DESC + ")V", false);
 
             for(int index = 0; index < fields.size(); ++index) {
+                Function function = fields.get(index);
+
                 mv.visitVarInsn(ALOAD, 0);
-                mv.visitVarInsn(ALOAD, index + 1);
-                mv.visitFieldInsn(PUTFIELD, className, fields.get(index).getName(), FUNCTION_TYPE_DESC);
+                mv.visitVarInsn(ALOAD, 2 + index);
+                mv.visitFieldInsn(PUTFIELD, className, function.getName(), getFunctionDesc(function));
             }
 
             mv.visitInsn(RETURN);
@@ -141,8 +160,9 @@ public class ExpressionCompiler {
 
         { // public double evaluate(double[] inputs);
             MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "evaluate", "([D)D", null, null);
+            MethodCompiler mc = new MethodCompiler(className, mv);
 
-            visitNode(className, mv, expression.root);
+            visitNode(mc, expression.root);
 
             mv.visitInsn(DRETURN);
             mv.visitMaxs(0, 0);
@@ -151,19 +171,17 @@ public class ExpressionCompiler {
 
         cw.visitEnd();
 
-        return loader.load(name, fields, cw.toByteArray());
+        return loader.load(name, expression, fields, cw.toByteArray());
     }
 
-    private void visitNode(String className, MethodVisitor mv, Node node) {
+    private void visitNode(MethodCompiler mc, Node node) {
         if(node instanceof ConstantNode) {
-            mv.visitLdcInsn(((ConstantNode) node).value);
+            mc.loadConstant(((ConstantNode) node).value);
             return;
         }
 
         if(node instanceof VariableNode) {
-            mv.visitVarInsn(ALOAD, 1);
-            mv.visitLdcInsn(((VariableNode) node).index);
-            mv.visitInsn(DALOAD);
+            mc.loadArgument(((VariableNode) node).index);
             return;
         }
 
@@ -171,37 +189,38 @@ public class ExpressionCompiler {
         Function function = functionNode.function;
         Node[] arguments = functionNode.arguments;
 
-        for(Node argument : arguments) {
-            visitNode(className, mv, argument);
+        if(!(function instanceof Compilable)) {
+            mc.loadField(function.getName(), getFunctionDesc(function));
         }
 
-        if(function instanceof Operator) {
-            ((Operator) function).visitInstructions(mv);
+        for(Node argument : arguments) {
+            visitNode(mc, argument);
+        }
+
+        if(function instanceof Compilable) {
+            ((Compilable) function).compile(mc);
+        } else if(function instanceof ThreeArgFunction) {
+            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(ThreeArgFunction.class), "evaluate", "(DDD)D", false);
+        } else if(function instanceof TwoArgFunction) {
+            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(TwoArgFunction.class), "evaluate", "(DD)D", false);
+        } else if(function instanceof OneArgFunction) {
+            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(OneArgFunction.class), "evaluate", "(D)D", false);
         } else {
-            mv.visitLdcInsn(arguments.length);
-            mv.visitIntInsn(NEWARRAY, T_DOUBLE);
-            mv.visitVarInsn(ASTORE, 2);
+            mc.loadConstant(arguments.length);
+            mc.intInsn(NEWARRAY, T_DOUBLE);
+            mc.storeTempReference(0);
 
             for(int index = arguments.length - 1; index >= 0; --index) {
-                mv.visitVarInsn(DSTORE, 3);
+                mc.storeTemp(1);
+                mc.loadTempReference(0);
+                mc.loadConstant(index);
+                mc.loadTemp(1);
 
-                mv.visitVarInsn(ALOAD, 2);
-                mv.visitLdcInsn(index);
-                mv.visitVarInsn(DLOAD, 3);
-
-                mv.visitInsn(DASTORE);
+                mc.insn(DASTORE);
             }
 
-            mv.visitVarInsn(ALOAD, 0);
-            mv.visitFieldInsn(GETFIELD, className, function.getName(), FUNCTION_TYPE_DESC);
-            mv.visitVarInsn(ALOAD, 2);
-            mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Function.class), "evaluate", "([D)D", true);
+            mc.loadTempReference(0);
+            mc.mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Function.class), "evaluate", "([D)D", true);
         }
-    }
-
-    private void visitArgumentLoad(MethodVisitor mv, int argumentIndex) {
-        mv.visitVarInsn(ALOAD, 1);
-        mv.visitLdcInsn(argumentIndex);
-        mv.visitInsn(DALOAD);
     }
 }

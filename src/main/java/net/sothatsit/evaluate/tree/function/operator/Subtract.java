@@ -1,25 +1,21 @@
 package net.sothatsit.evaluate.tree.function.operator;
 
-import jdk.internal.org.objectweb.asm.MethodVisitor;
-import net.sothatsit.evaluate.tree.function.BiOperator;
+import net.sothatsit.evaluate.compiler.MethodCompiler;
+import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
-import static jdk.internal.org.objectweb.asm.Opcodes.DSUB;
+public class Subtract extends CompilableTwoArgFunction {
 
-public class Subtract extends BiOperator {
-
-    public String getName() {
-        return "subtract";
+    public Subtract() {
+        super("subtract");
     }
 
-    public boolean isOrderDependant() {
-        return true;
-    }
-
+    @Override
     public double evaluate(double arg1, double arg2) {
         return arg1 - arg2;
     }
 
-    public void visitInstructions(MethodVisitor mv) {
-        mv.visitInsn(DSUB);
+    @Override
+    public void compile(MethodCompiler mc) {
+        mc.subtract();
     }
 }

@@ -1,25 +1,26 @@
 package net.sothatsit.evaluate.tree.function.operator;
 
-import jdk.internal.org.objectweb.asm.MethodVisitor;
-import net.sothatsit.evaluate.tree.function.BiOperator;
+import net.sothatsit.evaluate.compiler.MethodCompiler;
+import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
-import static jdk.internal.org.objectweb.asm.Opcodes.DMUL;
+public class Multiply extends CompilableTwoArgFunction {
 
-public class Multiply extends BiOperator {
-
-    public String getName() {
-        return "multiply";
+    public Multiply() {
+        super("multiply");
     }
 
+    @Override
     public boolean isOrderDependant() {
         return false;
     }
 
+    @Override
     public double evaluate(double arg1, double arg2) {
         return arg1 * arg2;
     }
 
-    public void visitInstructions(MethodVisitor mv) {
-        mv.visitInsn(DMUL);
+    @Override
+    public void compile(MethodCompiler mc) {
+        mc.multiply();
     }
 }

@@ -1,5 +1,6 @@
 package net.sothatsit.evaluate.compiler;
 
+import net.sothatsit.evaluate.tree.Expression;
 import net.sothatsit.evaluate.tree.function.Function;
 
 import java.lang.reflect.InvocationTargetException;
@@ -21,15 +22,23 @@ public class ExpressionLoader extends ClassLoader {
         return PACKAGE + "." + CLASS_NAME + "$" + counter;
     }
 
-    public CompiledExpression load(String name, List<Function> fields, byte[] bytes) {
+    public CompiledExpression load(String name, Expression expression, List<Function> fields, byte[] bytes) {
         Class<?> loaded = defineClass(name, bytes, 0, bytes.length);
         Class<? extends CompiledExpression> clazz = loaded.asSubclass(CompiledExpression.class);
 
         try {
-            Class<?>[] arguments = new Class<?>[fields.size()];
-            Arrays.fill(arguments, Function.class);
+            Class<?>[] argumentTypes = new Class<?>[1 + fields.size()];
 
-            return clazz.getConstructor(arguments).newInstance(fields.toArray());
+            argumentTypes[0] = Expression.class;
+            for(int index = 0; index < fields.size(); ++index) {
+                argumentTypes[1 + index] = ExpressionCompiler.getFunctionReferenceClass(fields.get(index));
+            }
+
+            Object[] arguments = new Object[1 + fields.size()];
+            arguments[0] = expression;
+            System.arraycopy(fields.toArray(), 0, arguments, 1, fields.size());
+
+            return clazz.getConstructor(argumentTypes).newInstance(arguments);
         } catch (InvocationTargetException | NoSuchMethodException | InstantiationException | IllegalAccessException e) {
             throw new RuntimeException("Compilation failed", e);
         }
