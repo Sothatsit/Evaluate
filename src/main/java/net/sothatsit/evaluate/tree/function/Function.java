@@ -10,5 +10,7 @@ public interface Function {
 
     public boolean isOrderDependant();
 
+    public boolean isPure();
+
     public double evaluate(double[] arguments);
 }

@@ -24,4 +24,9 @@ public abstract class AbstractFunction implements Function {
     public boolean isOrderDependant() {
         return true;
     }
+
+    @Override
+    public boolean isPure() {
+        return true;
+    }
 }

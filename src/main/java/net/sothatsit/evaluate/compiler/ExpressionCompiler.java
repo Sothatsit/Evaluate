@@ -29,7 +29,7 @@ public class ExpressionCompiler {
             }
         });
 
-        String eqn = "apple(a) * apple(b)";
+        String eqn = "apple(a)";
         Expression expression = parser.parse(eqn);
 
         ExpressionCompiler compiler = new ExpressionCompiler();
@@ -205,6 +205,8 @@ public class ExpressionCompiler {
             mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(TwoArgFunction.class), "evaluate", "(DD)D", false);
         } else if(function instanceof OneArgFunction) {
             mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(OneArgFunction.class), "evaluate", "(D)D", false);
+        } else if(function instanceof NoArgFunction) {
+            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(OneArgFunction.class), "evaluate", "()D", false);
         } else {
             mc.loadConstant(arguments.length);
             mc.intInsn(NEWARRAY, T_DOUBLE);

@@ -22,6 +22,9 @@ public class FunctionNode implements Node {
     }
 
     public boolean isConstant() {
+        if(!function.isPure())
+            return false;
+
         for(Node argument : arguments) {
             if(!argument.isConstant())
                 return false;
