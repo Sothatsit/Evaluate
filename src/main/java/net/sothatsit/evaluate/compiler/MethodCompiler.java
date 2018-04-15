@@ -102,8 +102,8 @@ public class MethodCompiler {
         mv.visitFieldInsn(GETFIELD, className, name, desc);
     }
 
-    public void staticMethod(Class<?> clazz, String name, int arguments) {
-        Class<?>[] parameterTypes = new Class<?>[arguments];
+    public void staticMethod(Class<?> clazz, String name, int argumentCount) {
+        Class<?>[] parameterTypes = new Class<?>[argumentCount];
         Arrays.fill(parameterTypes, double.class);
 
         Method method;
@@ -118,5 +118,29 @@ public class MethodCompiler {
             throw new IllegalArgumentException("Method " + name + " in " + clazz + " must return a double");
 
         mv.visitMethodInsn(INVOKESTATIC, Type.getInternalName(clazz), name, Type.getMethodDescriptor(method), false);
+    }
+
+    protected void method(Class<?> clazz, String name, int argumentCount) {
+        Class<?>[] parameterTypes = new Class<?>[argumentCount];
+        Arrays.fill(parameterTypes, double.class);
+
+        method(clazz, name, parameterTypes);
+    }
+
+    protected void method(Class<?> clazz, String name, Class<?>... parameterTypes) {
+        Method method;
+
+        try {
+            method = clazz.getDeclaredMethod(name, parameterTypes);
+        } catch (NoSuchMethodException e) {
+            throw new IllegalArgumentException("Unable to find method " + name + " in " + clazz, e);
+        }
+
+        if(!method.getReturnType().equals(double.class))
+            throw new IllegalArgumentException("Method " + name + " in " + clazz + " must return a double");
+
+        int opcode = (clazz.isInterface() ? INVOKEINTERFACE : INVOKEVIRTUAL);
+
+        mv.visitMethodInsn(opcode, Type.getInternalName(clazz), name, Type.getMethodDescriptor(method), clazz.isInterface());
     }
 }

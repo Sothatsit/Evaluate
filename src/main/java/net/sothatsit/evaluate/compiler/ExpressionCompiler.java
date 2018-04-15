@@ -29,7 +29,7 @@ public class ExpressionCompiler {
             }
         });
 
-        String eqn = "apple(a)";
+        String eqn = "apple(apple(apple(apple(apple(a)))))";
         Expression expression = parser.parse(eqn);
 
         ExpressionCompiler compiler = new ExpressionCompiler();
@@ -40,7 +40,7 @@ public class ExpressionCompiler {
 
         System.out.println(expression.evaluate(inputs) + " = " + compiled.evaluate(inputs));
 
-        long count = 10_000_000;
+        long count = 100_000_000;
 
         long expressionTime;
         {
@@ -193,36 +193,44 @@ public class ExpressionCompiler {
             mc.loadField(function.getName(), getFunctionDesc(function));
         }
 
-        for(Node argument : arguments) {
+        boolean varArgs = !(function instanceof Compilable       ||
+                            function instanceof ThreeArgFunction ||
+                            function instanceof TwoArgFunction   ||
+                            function instanceof OneArgFunction   ||
+                            function instanceof NoArgFunction);
+
+        if(varArgs) {
+            mc.loadConstant(arguments.length);
+            mc.intInsn(NEWARRAY, T_DOUBLE);
+        }
+
+        for(int index = 0; index < arguments.length; ++index) {
+            Node argument = arguments[index];
+
+            if(varArgs) {
+                mc.duplicate();
+                mc.loadConstant(index);
+            }
+
             visitNode(mc, argument);
+
+            if(varArgs) {
+                mc.insn(DASTORE);
+            }
         }
 
         if(function instanceof Compilable) {
             ((Compilable) function).compile(mc);
         } else if(function instanceof ThreeArgFunction) {
-            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(ThreeArgFunction.class), "evaluate", "(DDD)D", false);
+            mc.method(ThreeArgFunction.class, "evaluate", 3);
         } else if(function instanceof TwoArgFunction) {
-            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(TwoArgFunction.class), "evaluate", "(DD)D", false);
+            mc.method(TwoArgFunction.class, "evaluate", 2);
         } else if(function instanceof OneArgFunction) {
-            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(OneArgFunction.class), "evaluate", "(D)D", false);
+            mc.method(OneArgFunction.class, "evaluate", 1);
         } else if(function instanceof NoArgFunction) {
-            mc.mv.visitMethodInsn(INVOKEVIRTUAL, Type.getInternalName(OneArgFunction.class), "evaluate", "()D", false);
+            mc.method(NoArgFunction.class, "evaluate", 0);
         } else {
-            mc.loadConstant(arguments.length);
-            mc.intInsn(NEWARRAY, T_DOUBLE);
-            mc.storeTempReference(0);
-
-            for(int index = arguments.length - 1; index >= 0; --index) {
-                mc.storeTemp(1);
-                mc.loadTempReference(0);
-                mc.loadConstant(index);
-                mc.loadTemp(1);
-
-                mc.insn(DASTORE);
-            }
-
-            mc.loadTempReference(0);
-            mc.mv.visitMethodInsn(INVOKEINTERFACE, Type.getInternalName(Function.class), "evaluate", "([D)D", true);
+            mc.method(Function.class, "evaluate", double[].class);
         }
     }
 }
