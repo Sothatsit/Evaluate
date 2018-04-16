@@ -5,85 +5,15 @@ import jdk.internal.org.objectweb.asm.MethodVisitor;
 import static jdk.internal.org.objectweb.asm.Opcodes.*;
 
 import jdk.internal.org.objectweb.asm.Type;
-import net.sothatsit.evaluate.tree.Expression;
-import net.sothatsit.evaluate.parser.ExpressionParser;
-import net.sothatsit.evaluate.tree.ConstantNode;
-import net.sothatsit.evaluate.tree.FunctionNode;
-import net.sothatsit.evaluate.tree.Node;
-import net.sothatsit.evaluate.tree.VariableNode;
+import net.sothatsit.evaluate.tree.*;
 import net.sothatsit.evaluate.tree.function.*;
 
 import java.util.*;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class ExpressionCompiler {
 
     private static final String EXPRESSION_TYPE_DESC = "L" + Type.getInternalName(Expression.class) + ";";
-
-    public static void main(String[] args) {
-        ExpressionParser parser = new ExpressionParser();
-        parser.addFunctions(MathFunctions.get());
-        parser.addFunction(new OneArgFunction("apple") {
-            @Override
-            public double evaluate(double arg) {
-                return 2 * arg + 4;
-            }
-        });
-
-        String eqn = "apple(apple(apple(apple(apple(a)))))";
-        Expression expression = parser.parse(eqn);
-
-        ExpressionCompiler compiler = new ExpressionCompiler();
-        CompiledExpression compiled = compiler.compile(expression);
-
-        System.out.println(compiled.getClass());
-        double[] inputs = new double[] {Math.E, 2 * Math.E};
-
-        System.out.println(expression.evaluate(inputs) + " = " + compiled.evaluate(inputs));
-
-        long count = 100_000_000;
-
-        long expressionTime;
-        {
-            // Warmup
-            for(int i=0; i < count; ++i) {
-                expression.evaluate(inputs);
-            }
-
-            long start = System.nanoTime();
-            for(int i=0; i < count; ++i) {
-                expression.evaluate(inputs);
-            }
-            long end = System.nanoTime();
-
-            expressionTime = end - start;
-        }
-
-        long compiledTime;
-        {
-            // Warmup
-            for(int i=0; i < count; ++i) {
-                compiled.evaluate(inputs);
-            }
-
-            long start = System.nanoTime();
-            for(int i=0; i < count; ++i) {
-                compiled.evaluate(inputs);
-            }
-            long end = System.nanoTime();
-
-            compiledTime = end - start;
-        }
-
-        double expressionMs = expressionTime / 1_000_000d;
-        double compiledMs = compiledTime / 1_000_000d;
-
-        double expressionPer = (double) expressionTime / count;
-        double compiledPer = (double) compiledTime / count;
-
-        System.out.println("Expression took " + expressionMs + "ms (" + expressionPer + " ns per op)");
-        System.out.println("Compiled took " + compiledMs + "ms (" + compiledPer + " ns per op)");
-    }
-
     private final ExpressionLoader loader = new ExpressionLoader();
 
     protected static Class<?> getFunctionReferenceClass(Function function) {
@@ -111,17 +41,29 @@ public class ExpressionCompiler {
         String classSuper = Type.getInternalName(CompiledExpression.class);
         cw.visit(V1_8, ACC_PUBLIC, className, null, classSuper, null);
 
-        List<Function> fields = new ArrayList<>(expression.root.getAllUsedFunctions());
-        { // We don't need to store references to operators
-            Iterator<Function> iterator = fields.iterator();
-            while(iterator.hasNext()) {
-                if(!(iterator.next() instanceof Compilable))
+        Set<Function> unorderedFields = new HashSet<>();
+        { // Find all the external functions that the expression uses
+            Queue<Node> toCheck = new LinkedBlockingQueue<>();
+            toCheck.add(expression.root);
+
+            while(!toCheck.isEmpty()) {
+                Node node = toCheck.poll();
+
+                if(!(node instanceof FunctionNode))
                     continue;
 
-                iterator.remove();
+                FunctionNode functionNode = (FunctionNode) node;
+                Collections.addAll(toCheck, functionNode.getArguments());
+
+                if(functionNode.getFunction() instanceof Compilable)
+                    continue;
+
+                unorderedFields.add(functionNode.getFunction());
             }
         }
+        List<Function> fields = new ArrayList<>(unorderedFields);
 
+        cw.visitField(ACC_PRIVATE, "inputs", "[D", null, null).visitEnd();
         for(Function function : fields) {
             cw.visitField(ACC_PRIVATE, function.getName(), getFunctionDesc(function), null, null).visitEnd();
         }
@@ -131,6 +73,7 @@ public class ExpressionCompiler {
             {
                 desc.append("(");
                 desc.append(EXPRESSION_TYPE_DESC);
+                desc.append("I");
 
                 for(Function function : fields) {
                     desc.append(getFunctionDesc(function));
@@ -143,13 +86,14 @@ public class ExpressionCompiler {
 
             mv.visitVarInsn(ALOAD, 0);
             mv.visitVarInsn(ALOAD, 1);
-            mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "(" + EXPRESSION_TYPE_DESC + ")V", false);
+            mv.visitVarInsn(ILOAD, 2);
+            mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "(" + EXPRESSION_TYPE_DESC + "I)V", false);
 
             for(int index = 0; index < fields.size(); ++index) {
                 Function function = fields.get(index);
 
                 mv.visitVarInsn(ALOAD, 0);
-                mv.visitVarInsn(ALOAD, 2 + index);
+                mv.visitVarInsn(ALOAD, 3 + index);
                 mv.visitFieldInsn(PUTFIELD, className, function.getName(), getFunctionDesc(function));
             }
 
@@ -159,7 +103,7 @@ public class ExpressionCompiler {
         }
 
         { // public double evaluate(double[] inputs);
-            MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "evaluate", "([D)D", null, null);
+            MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "evaluate", "()D", null, null);
             MethodCompiler mc = new MethodCompiler(className, mv);
 
             visitNode(mc, expression.root);
@@ -171,7 +115,7 @@ public class ExpressionCompiler {
 
         cw.visitEnd();
 
-        return loader.load(name, expression, fields, cw.toByteArray());
+        return loader.load(name, expression, 2, fields, cw.toByteArray());
     }
 
     private void visitNode(MethodCompiler mc, Node node) {
@@ -185,7 +129,7 @@ public class ExpressionCompiler {
             return;
         }
 
-        FunctionNode functionNode = (FunctionNode) node;
+        SingleFunctionNode functionNode = (SingleFunctionNode) node;
         Function function = functionNode.function;
         Node[] arguments = functionNode.arguments;
 

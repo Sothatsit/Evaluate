@@ -1,8 +1,10 @@
 package net.sothatsit.evaluate.parser;
 
+import net.sothatsit.evaluate.optimiser.CompositeOptimiser;
+import net.sothatsit.evaluate.optimiser.Optimiser;
 import net.sothatsit.evaluate.tree.Expression;
 import net.sothatsit.evaluate.tree.ConstantNode;
-import net.sothatsit.evaluate.tree.FunctionNode;
+import net.sothatsit.evaluate.tree.SingleFunctionNode;
 import net.sothatsit.evaluate.tree.Node;
 import net.sothatsit.evaluate.tree.VariableNode;
 import net.sothatsit.evaluate.tree.function.Function;
@@ -17,17 +19,58 @@ public class ExpressionParser {
     public static void main(String[] args) {
         ExpressionParser parser = new ExpressionParser();
 
-        String equation = "3 * (1 * 2 * 3 * 4 * (e + 3 + 2 - 4)) + 1 + (c + 2 + e^(4*3+2^7) * 3)";
+        parser.addArgument("a");
+        parser.addArgument("b");
+        parser.addArgument("c");
+        parser.addArgument("d");
+        parser.addArgument("e");
+        parser.addArgument("f");
+
+        String equation = "(a + e) * e / b / (c + 1.5 * (2.5^6)) / (d / e / f)^7";
 
         Node expression = parser.parseNode(equation);
-        Node simplified = parser.parseNode(equation).trySimplify();
-
         System.out.println(expression);
+
+        Expression simplified = parser.parse(equation);
         System.out.println(simplified);
+
+        double[] inputs = new double[] {
+                Math.random(), Math.random(),
+                Math.random(), Math.random(),
+                Math.random(), Math.random()
+        };
+
+        System.out.println();
+        System.out.println(expression.evaluate(inputs) + " = " + simplified.evaluate(inputs));
     }
 
+    private final Optimiser optimiser;
+
     private final Map<String, Function> functions = new HashMap<>();
+    private final Map<String, Double> constants = new HashMap<>();
     private final List<String> arguments = new ArrayList<>();
+
+    public ExpressionParser() {
+        this(CompositeOptimiser.all());
+    }
+
+    public ExpressionParser(Optimiser optimiser) {
+        this.optimiser = optimiser;
+    }
+
+    public int addArgument(String name) {
+        int index = arguments.size();
+        arguments.add(name);
+
+        return index;
+    }
+
+    public int getArgumentIndex(String name) {
+        if(!arguments.contains(name))
+            throw new IllegalArgumentException("Unable to find the variable " + name);
+
+        return arguments.indexOf(name);
+    }
 
     public void addFunction(Function function) {
         functions.put(function.getName(), function);
@@ -43,18 +86,16 @@ public class ExpressionParser {
         }
     }
 
-    private int getArgumentIndex(String name) {
-        if(!arguments.contains(name)) {
-            arguments.add(name);
-        }
-
-        return arguments.indexOf(name);
+    public void addConstant(String name, double value) {
+        constants.put(name, value);
     }
 
     public Expression parse(String equation) {
-        Node root = Node.simplifyOrItself(parseNode(equation));
+        Expression expression = new Expression(parseNode(equation), arguments);
 
-        return new Expression(root, arguments);
+        optimiser.optimise(expression);
+
+        return expression;
     }
 
     private Node parseNode(String equation) {
@@ -93,7 +134,7 @@ public class ExpressionParser {
             if(left.isOperator() || right.isOperator())
                 throw new IllegalArgumentException("Two adjacent operators");
 
-            FunctionNode node = new FunctionNode(operator.function, left.getNode(), right.getNode());
+            SingleFunctionNode node = new SingleFunctionNode(operator.function, left.getNode(), right.getNode());
 
             tokens.remove(operatorIndex + 1);
             tokens.remove(operatorIndex);
@@ -152,12 +193,20 @@ public class ExpressionParser {
                         throw new IllegalArgumentException("Unknown function " + identifier);
 
                     Node[] arguments = extractFunctionArguments(brackets);
-                    FunctionNode node = new FunctionNode(function, arguments);
+                    SingleFunctionNode node = new SingleFunctionNode(function, arguments);
 
                     index += brackets.length();
                     index += 1;
 
                     tokens.add(new Token.NodeToken(node));
+                    continue;
+                }
+
+                if(constants.containsKey(identifier)) {
+                    double value = constants.get(identifier);
+                    Node constant = new ConstantNode(identifier, value);
+
+                    tokens.add(new Token.NodeToken(constant));
                     continue;
                 }
 

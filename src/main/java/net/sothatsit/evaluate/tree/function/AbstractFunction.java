@@ -1,5 +1,7 @@
 package net.sothatsit.evaluate.tree.function;
 
+import net.sothatsit.evaluate.optimiser.OptimiseOptions;
+
 public abstract class AbstractFunction implements Function {
 
     private final String name;
@@ -21,12 +23,7 @@ public abstract class AbstractFunction implements Function {
     }
 
     @Override
-    public boolean isOrderDependant() {
-        return true;
-    }
-
-    @Override
-    public boolean isPure() {
-        return true;
+    public OptimiseOptions getOptimiseOptions() {
+        return OptimiseOptions.DEFAULT;
     }
 }

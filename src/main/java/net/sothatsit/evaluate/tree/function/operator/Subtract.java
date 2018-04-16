@@ -5,7 +5,9 @@ import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
 public class Subtract extends CompilableTwoArgFunction {
 
-    public Subtract() {
+    public static final Subtract fn = new Subtract();
+
+    private Subtract() {
         super("subtract");
     }
 

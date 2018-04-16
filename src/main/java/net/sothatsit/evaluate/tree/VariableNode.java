@@ -1,10 +1,5 @@
 package net.sothatsit.evaluate.tree;
 
-import net.sothatsit.evaluate.tree.function.Function;
-
-import java.util.Collections;
-import java.util.List;
-
 public class VariableNode implements Node {
 
     public final String name;
@@ -15,20 +10,19 @@ public class VariableNode implements Node {
         this.index = index;
     }
 
-    public boolean isConstant() {
-        return false;
+    @Override
+    public int getHeight() {
+        return 1;
     }
 
-    public List<Function> getAllUsedFunctions() {
-        return Collections.emptyList();
-    }
-
-    public double evaluate(double... inputs) {
+    @Override
+    public double evaluate(double[] inputs) {
         return inputs[index];
     }
 
-    public Node trySimplify() {
-        return null;
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof VariableNode && ((VariableNode) obj).index == index;
     }
 
     @Override

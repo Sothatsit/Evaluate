@@ -9,25 +9,19 @@ public class MathFunctions {
 
     public static Function[] get() {
         return new Function[] {
-                add, subtract, multiply, divide,
+                Add.fn, Subtract.fn, Multiply.fn, Divide.fn,
 
                 sin, cos, tan,
                 sinh, cosh, tanh,
                 asin, acos, atan, atan2,
                 csc, sec, cot,
 
-                sqrt, pow,
+                sqrt, Power.fn,
                 ln, log2, log10,
                 sign, abs, floor, ceil,
                 round, roundto
         };
     }
-
-    public static final Add add = new Add();
-    public static final Subtract subtract = new Subtract();
-    public static final Multiply multiply = new Multiply();
-    public static final Divide divide = new Divide();
-    public static final Power pow = new Power();
 
     public static final CompilableOneArgFunction sin = new CompilableOneArgFunction("sin") {
         public double evaluate(double arg) {
@@ -280,7 +274,7 @@ public class MathFunctions {
             mc.loadConstant(10);
             mc.insn(DUP_X1);
             mc.pop();
-            mc.perform(pow);
+            mc.perform(Power.fn);
 
             mc.duplicate();
             mc.storeTemp(0);

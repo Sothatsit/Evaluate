@@ -1,25 +1,21 @@
 package net.sothatsit.evaluate.tree;
 
-import net.sothatsit.evaluate.tree.function.Function;
-
-import java.util.List;
+import java.util.Comparator;
 
 public interface Node {
 
-    public boolean isConstant();
-
-    public List<Function> getAllUsedFunctions();
-
-    public double evaluate(double... inputs);
-
     /**
-     * @return A new simplified Node if one exists, or else null
+     * Get the maximum depth of the tree below this node.
      */
-    public Node trySimplify();
+    public int getHeight();
 
-    public static Node simplifyOrItself(Node node) {
-        Node simplified = node.trySimplify();
+    public double evaluate(double[] inputs);
 
-        return (simplified != null ? simplified : node);
+    public static class NodeComparator implements Comparator<Node> {
+
+        @Override
+        public int compare(Node one, Node two) {
+            return Integer.compare(two.getHeight(), one.getHeight());
+        }
     }
 }

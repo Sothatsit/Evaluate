@@ -5,7 +5,9 @@ import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
 public class Divide extends CompilableTwoArgFunction {
 
-    public Divide() {
+    public static final Divide fn = new Divide();
+
+    private Divide() {
         super("divide");
     }
 

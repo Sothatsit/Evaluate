@@ -72,7 +72,7 @@ public class MethodCompiler {
     }
 
     public void loadArgument(int argumentIndex) {
-        varInsn(ALOAD, 1);
+        loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
         mv.visitLdcInsn(argumentIndex);
         insn(DALOAD);
     }
@@ -98,6 +98,10 @@ public class MethodCompiler {
     }
 
     public void loadField(String name, String desc) {
+        loadField(className, name, desc);
+    }
+
+    public void loadField(String className, String name, String desc) {
         loadThis();
         mv.visitFieldInsn(GETFIELD, className, name, desc);
     }

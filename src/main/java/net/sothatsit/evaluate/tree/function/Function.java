@@ -1,5 +1,7 @@
 package net.sothatsit.evaluate.tree.function;
 
+import net.sothatsit.evaluate.optimiser.OptimiseOptions;
+
 public interface Function {
 
     public String getName();
@@ -8,9 +10,7 @@ public interface Function {
 
     public int getArgumentCount();
 
-    public boolean isOrderDependant();
-
-    public boolean isPure();
+    public OptimiseOptions getOptimiseOptions();
 
     public double evaluate(double[] arguments);
 }

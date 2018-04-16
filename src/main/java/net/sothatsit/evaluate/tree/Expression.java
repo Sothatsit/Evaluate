@@ -1,20 +1,16 @@
 package net.sothatsit.evaluate.tree;
 
-import net.sothatsit.evaluate.tree.function.Function;
-
 import java.util.ArrayList;
 import java.util.List;
 
 public class Expression {
 
-    public final Node root;
+    public Node root;
     public final List<String> arguments;
-    public final List<Function> functionsUsed;
 
     public Expression(Node root, List<String> arguments) {
         this.root = root;
         this.arguments = new ArrayList<>(arguments);
-        this.functionsUsed = new ArrayList<>();
     }
 
     public int getArgumentCount() {
@@ -30,5 +26,10 @@ public class Expression {
 
     public double evaluate(double[] inputs) {
         return root.evaluate(inputs);
+    }
+
+    @Override
+    public String toString() {
+        return root.toString();
     }
 }

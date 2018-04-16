@@ -1,11 +1,6 @@
 package net.sothatsit.evaluate.tree;
 
-import net.sothatsit.evaluate.tree.function.Function;
-
-import java.util.Collections;
-import java.util.List;
-
-public class ConstantNode implements Node {
+public final class ConstantNode implements Node {
 
     public final String name;
     public final double value;
@@ -19,20 +14,20 @@ public class ConstantNode implements Node {
         this.value = value;
     }
 
-    public boolean isConstant() {
-        return true;
+    @Override
+    public int getHeight() {
+        return 1;
     }
 
-    public List<Function> getAllUsedFunctions() {
-        return Collections.emptyList();
-    }
-
-    public double evaluate(double... inputs) {
+    @Override
+    public double evaluate(double[] inputs) {
         return value;
     }
 
-    public Node trySimplify() {
-        return null;
+    @Override
+    public boolean equals(Object obj) {
+        return obj instanceof ConstantNode && ((ConstantNode) obj).value == value;
+
     }
 
     @Override

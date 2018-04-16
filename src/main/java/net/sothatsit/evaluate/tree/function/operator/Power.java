@@ -5,7 +5,9 @@ import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
 public class Power extends CompilableTwoArgFunction {
 
-    public Power() {
+    public static final Power fn = new Power();
+
+    private Power() {
         super("power");
     }
 

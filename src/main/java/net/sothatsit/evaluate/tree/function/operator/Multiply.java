@@ -1,17 +1,21 @@
 package net.sothatsit.evaluate.tree.function.operator;
 
 import net.sothatsit.evaluate.compiler.MethodCompiler;
+import net.sothatsit.evaluate.optimiser.OptimiseOptions;
 import net.sothatsit.evaluate.tree.function.CompilableTwoArgFunction;
 
 public class Multiply extends CompilableTwoArgFunction {
 
-    public Multiply() {
+    public static final Multiply fn = new Multiply();
+
+    private Multiply() {
         super("multiply");
     }
 
     @Override
-    public boolean isOrderDependant() {
-        return false;
+    public OptimiseOptions getOptimiseOptions() {
+        return super.getOptimiseOptions()
+                    .withIsOrderDependant(false);
     }
 
     @Override
