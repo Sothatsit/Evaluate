@@ -72,7 +72,7 @@ public class MethodCompiler {
 
     public void loadArgument(int argumentIndex) {
         loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
-        mv.visitLdcInsn(argumentIndex);
+        loadConstant(argumentIndex);
         insn(DALOAD);
     }
 

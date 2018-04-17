@@ -139,25 +139,49 @@ public class ExpressionCompiler {
             }
         }
 
+        List<VariableNode> variables = new ArrayList<>();
         List<Node> commonTerms = new ArrayList<>();
 
         for(Map.Entry<Node, Integer> entry : subtreeFrequencies.entrySet()) {
             if(entry.getValue() == 1)
                 continue;
 
-            commonTerms.add(entry.getKey());
+            if(entry.getKey() instanceof VariableNode) {
+                variables.add((VariableNode) entry.getKey());
+            } else {
+                commonTerms.add(entry.getKey());
+            }
         }
 
+        Collections.sort(variables, new Node.NodeComparator());
         Collections.sort(commonTerms, new Node.NodeComparator(false));
 
         Map<Node, Integer> preComputedTerms = new HashMap<>();
+
+        if(variables.size() > 0) {
+            mc.loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
+
+            for(int index = 0; index < variables.size(); ++index) {
+                VariableNode term = variables.get(index);
+
+                if(index != variables.size() - 1) {
+                    mc.insn(DUP);
+                }
+
+                mc.loadConstant(term.index);
+                mc.insn(DALOAD);
+
+                int variableIndex = mc.locals.newDoubleVariable();
+                mc.locals.storeVariable(variableIndex);
+                preComputedTerms.put(term, variableIndex);
+            }
+        }
 
         for (Node term : commonTerms) {
             visitNode(preComputedTerms, mc, term);
 
             int index = mc.locals.newDoubleVariable();
             mc.locals.storeVariable(index);
-
             preComputedTerms.put(term, index);
         }
 
