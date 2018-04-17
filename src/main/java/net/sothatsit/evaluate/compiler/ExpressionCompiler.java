@@ -106,7 +106,7 @@ public class ExpressionCompiler {
             MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "evaluate", "()D", null, null);
             MethodCompiler mc = new MethodCompiler(className, mv);
 
-            visitNode(mc, expression.root);
+            compileMethod(mc, expression.root);
 
             mv.visitInsn(DRETURN);
             mv.visitMaxs(0, 0);
@@ -118,7 +118,58 @@ public class ExpressionCompiler {
         return loader.load(name, expression, 2, fields, cw.toByteArray());
     }
 
-    private void visitNode(MethodCompiler mc, Node node) {
+    private void compileMethod(MethodCompiler mc, Node node) {
+        Map<Node, Integer> subtreeFrequencies = new HashMap<>();
+
+        Queue<Node> toCheck = new LinkedBlockingQueue<>();
+        toCheck.add(node);
+
+        while(!toCheck.isEmpty()) {
+            Node check = toCheck.poll();
+            Integer count = subtreeFrequencies.get(check);
+
+            if(count == null) {
+                subtreeFrequencies.put(check, 1);
+            } else {
+                subtreeFrequencies.put(check, 1 + count);
+            }
+
+            if(check instanceof FunctionNode) {
+                Collections.addAll(toCheck, ((FunctionNode) check).getArguments());
+            }
+        }
+
+        List<Node> commonTerms = new ArrayList<>();
+
+        for(Map.Entry<Node, Integer> entry : subtreeFrequencies.entrySet()) {
+            if(entry.getValue() == 1)
+                continue;
+
+            commonTerms.add(entry.getKey());
+        }
+
+        Collections.sort(commonTerms, new Node.NodeComparator(false));
+
+        Map<Node, Integer> preComputedTerms = new HashMap<>();
+
+        for (Node term : commonTerms) {
+            visitNode(preComputedTerms, mc, term);
+
+            int index = mc.locals.newDoubleVariable();
+            mc.locals.storeVariable(index);
+
+            preComputedTerms.put(term, index);
+        }
+
+        visitNode(preComputedTerms, mc, node);
+    }
+
+    private void visitNode(Map<Node, Integer> preComputedTerms, MethodCompiler mc, Node node) {
+        if(preComputedTerms.containsKey(node)) {
+            mc.locals.loadVariable(preComputedTerms.get(node));
+            return;
+        }
+
         if(node instanceof ConstantNode) {
             mc.loadConstant(((ConstantNode) node).value);
             return;
@@ -133,15 +184,15 @@ public class ExpressionCompiler {
         Function function = functionNode.function;
         Node[] arguments = functionNode.arguments;
 
-        if(!(function instanceof Compilable)) {
-            mc.loadField(function.getName(), getFunctionDesc(function));
-        }
-
         boolean varArgs = !(function instanceof Compilable       ||
                             function instanceof ThreeArgFunction ||
                             function instanceof TwoArgFunction   ||
                             function instanceof OneArgFunction   ||
                             function instanceof NoArgFunction);
+
+        if(!(function instanceof Compilable)) {
+            mc.loadField(function.getName(), getFunctionDesc(function));
+        }
 
         if(varArgs) {
             mc.loadConstant(arguments.length);
@@ -152,11 +203,11 @@ public class ExpressionCompiler {
             Node argument = arguments[index];
 
             if(varArgs) {
-                mc.duplicate();
+                mc.insn(DUP);
                 mc.loadConstant(index);
             }
 
-            visitNode(mc, argument);
+            visitNode(preComputedTerms, mc, argument);
 
             if(varArgs) {
                 mc.insn(DASTORE);

@@ -21,6 +21,11 @@ public class VariableNode implements Node {
     }
 
     @Override
+    public int hashCode() {
+        return Integer.hashCode(index);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         return obj instanceof VariableNode && ((VariableNode) obj).index == index;
     }

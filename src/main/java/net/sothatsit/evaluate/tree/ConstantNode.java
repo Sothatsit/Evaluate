@@ -25,6 +25,11 @@ public final class ConstantNode implements Node {
     }
 
     @Override
+    public int hashCode() {
+        return Double.hashCode(value);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         return obj instanceof ConstantNode && ((ConstantNode) obj).value == value;
 

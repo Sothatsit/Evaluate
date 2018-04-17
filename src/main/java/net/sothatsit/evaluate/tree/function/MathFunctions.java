@@ -18,8 +18,9 @@ public class MathFunctions {
 
                 sqrt, Power.fn,
                 ln, log2, log10,
-                sign, abs, floor, ceil,
-                round, roundto
+                sign, abs,
+
+                floor, ceil, round
         };
     }
 
@@ -131,7 +132,8 @@ public class MathFunctions {
         public void compile(MethodCompiler mc) {
             mc.staticMethod(Math.class, "sin", 1);
             mc.loadConstant(1.0d);
-            mc.moveOneUnder();
+            mc.insn(DUP2_X2);
+            mc.insn(POP2);
 
             mc.divide();
         }
@@ -145,7 +147,8 @@ public class MathFunctions {
         public void compile(MethodCompiler mc) {
             mc.staticMethod(Math.class, "cos", 1);
             mc.loadConstant(1.0d);
-            mc.moveOneUnder();
+            mc.insn(DUP2_X2);
+            mc.insn(POP2);
 
             mc.divide();
         }
@@ -159,7 +162,8 @@ public class MathFunctions {
         public void compile(MethodCompiler mc) {
             mc.staticMethod(Math.class, "tan", 1);
             mc.loadConstant(1.0d);
-            mc.moveOneUnder();
+            mc.insn(DUP2_X2);
+            mc.insn(POP2);
 
             mc.divide();
         }
@@ -260,30 +264,6 @@ public class MathFunctions {
 
         public void compile(MethodCompiler mc) {
             mc.staticMethod(Math.class, "round", 1);
-        }
-    };
-
-    public static final CompilableTwoArgFunction roundto = new CompilableTwoArgFunction("roundto") {
-        public double evaluate(double arg, double decimalPlaces) {
-            double a = Math.pow(10, decimalPlaces);
-
-            return Math.round(arg * a) / a;
-        }
-
-        public void compile(MethodCompiler mc) {
-            mc.loadConstant(10);
-            mc.insn(DUP_X1);
-            mc.pop();
-            mc.perform(Power.fn);
-
-            mc.duplicate();
-            mc.storeTemp(0);
-
-            mc.multiply();
-            mc.perform(round);
-
-            mc.loadTemp(0);
-            mc.divide();
         }
     };
 }

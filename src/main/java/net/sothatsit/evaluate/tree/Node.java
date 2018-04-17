@@ -13,9 +13,22 @@ public interface Node {
 
     public static class NodeComparator implements Comparator<Node> {
 
+        private final int heightMultiplier;
+
+        public NodeComparator() {
+            this(true);
+        }
+
+        public NodeComparator(boolean byDescendingHeight) {
+            this.heightMultiplier = (byDescendingHeight ? -1 : 1);
+        }
+
         @Override
         public int compare(Node one, Node two) {
-            return Integer.compare(two.getHeight(), one.getHeight());
+            if(one instanceof VariableNode && two instanceof VariableNode)
+                return Integer.compare(((VariableNode) one).index, ((VariableNode) two).index);
+
+            return heightMultiplier * Integer.compare(one.getHeight(), two.getHeight());
         }
     }
 }

@@ -78,7 +78,7 @@ public enum BaseOperator {
                 Node argument = arguments[index];
                 boolean brackets =
                         (orderDependant && index != 0 && argument instanceof FunctionNode)
-                        || getPrecedence(argument) < precedence;
+                        || getPrecedence(argument) <= precedence;
 
                 if(index != 0) builder.append(separator);
                 if(brackets) builder.append("(");

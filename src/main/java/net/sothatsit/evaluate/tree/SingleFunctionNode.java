@@ -2,7 +2,6 @@ package net.sothatsit.evaluate.tree;
 
 import net.sothatsit.evaluate.parser.BaseOperator;
 import net.sothatsit.evaluate.tree.function.Function;
-import net.sothatsit.evaluate.tree.function.operator.*;
 
 public final class SingleFunctionNode extends FunctionNode {
 
@@ -39,6 +38,21 @@ public final class SingleFunctionNode extends FunctionNode {
         }
 
         return function.evaluate(argumentValues);
+    }
+
+    @Override
+    public int hashCode() {
+        int hashCode = 29;
+
+        hashCode *= 37;
+        hashCode += function.getName().hashCode();
+
+        for(Node argument : arguments) {
+            hashCode *= 37;
+            hashCode += argument.hashCode();
+        }
+
+        return hashCode;
     }
 
     @Override

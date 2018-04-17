@@ -26,7 +26,7 @@ public class ExpressionParser {
         parser.addArgument("e");
         parser.addArgument("f");
 
-        String equation = "(a + e) * e / b / (c + 1.5 * (2.5^6)) / (d / e / f)^7";
+        String equation = "a*b*c*d / a/b/c/d";
 
         Node expression = parser.parseNode(equation);
         System.out.println(expression);

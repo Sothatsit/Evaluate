@@ -32,7 +32,11 @@ public class SimpleOptimiser extends Optimiser {
     }
 
     /**
-     * Remove multi-functions and replaces them with streaks of single functions.
+     * Remove multi-functions and replaces them with multiple single functions.
+     *
+     * e.g. (a * b * c * d * e) -> (((a * b) * (c * d)) * e)
+     *
+     * This is to simplify the compilation process.
      */
     protected Node removeMultiFunctions(Node node) {
         if(!(node instanceof FunctionNode))

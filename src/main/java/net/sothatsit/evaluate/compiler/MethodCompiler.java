@@ -12,11 +12,17 @@ public class MethodCompiler {
 
     public final String className;
     public final MethodVisitor mv;
+    public final Locals locals;
 
     public MethodCompiler(String className, MethodVisitor mv) {
         this.className = className;
         this.mv = mv;
+        this.locals = new Locals(this);
     }
+
+    //
+    // SIMPLE INSTRUCTIONS
+    //
 
     public void insn(int opcode) {
         mv.visitInsn(opcode);
@@ -50,19 +56,6 @@ public class MethodCompiler {
         function.compile(this);
     }
 
-    public void duplicate() {
-        insn(DUP);
-    }
-
-    public void pop() {
-        insn(POP);
-    }
-
-    public void moveOneUnder() {
-        insn(DUP2_X2);
-        insn(POP2);
-    }
-
     public void loadConstant(int constant) {
         mv.visitLdcInsn(constant);
     }
@@ -70,6 +63,12 @@ public class MethodCompiler {
     public void loadConstant(double constant) {
         mv.visitLdcInsn(constant);
     }
+
+
+
+    //
+    // OBJECTS
+    //
 
     public void loadArgument(int argumentIndex) {
         loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
@@ -79,22 +78,6 @@ public class MethodCompiler {
 
     public void loadThis() {
         varInsn(ALOAD, 0);
-    }
-
-    public void storeTemp(int tempIndex) {
-        varInsn(DSTORE, 2 + tempIndex);
-    }
-
-    public void loadTemp(int tempIndex) {
-        varInsn(DLOAD, 2 + tempIndex);
-    }
-
-    public void storeTempReference(int tempIndex) {
-        varInsn(ASTORE, 2 + tempIndex);
-    }
-
-    public void loadTempReference(int tempIndex) {
-        varInsn(ALOAD, 2 + tempIndex);
     }
 
     public void loadField(String name, String desc) {
