@@ -39,10 +39,10 @@ public class SimpleOptimiser extends Optimiser {
      * This is to simplify the compilation process.
      */
     protected Node removeMultiFunctions(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = ((FunctionNode) node);
+        AbstractFunctionNode functionNode = ((AbstractFunctionNode) node);
         Function function = functionNode.getFunction();
         Node[] argumentArray = functionNode.getArguments();
 
@@ -64,7 +64,7 @@ public class SimpleOptimiser extends Optimiser {
                 Node left = argumentArray[index];
                 Node right = argumentArray[index + 1];
 
-                arguments.add(new SingleFunctionNode(function, left, right));
+                arguments.add(new FunctionNode(function, left, right));
             }
 
             if((argumentArray.length & 1) == 1) {
@@ -86,10 +86,10 @@ public class SimpleOptimiser extends Optimiser {
      *      (a ^ 1) -> a
      */
     protected Node removeNoOps(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = ((FunctionNode) node);
+        AbstractFunctionNode functionNode = ((AbstractFunctionNode) node);
         Function function = functionNode.getFunction();
         Node[] arguments = functionNode.getArguments();
 
@@ -149,10 +149,10 @@ public class SimpleOptimiser extends Optimiser {
      * e.g. (a * (b * b)) -> ((b * b) * a)
      */
     protected Node reorderArguments(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = ((FunctionNode) node);
+        AbstractFunctionNode functionNode = ((AbstractFunctionNode) node);
         Function function = functionNode.getFunction();
         Node[] arguments = functionNode.getArguments();
 
@@ -180,8 +180,8 @@ public class SimpleOptimiser extends Optimiser {
         if(isConstant(node))
             return new ConstantNode(node.evaluate(new double[0]));
 
-        if(node instanceof SingleFunctionNode) {
-            Node[] arguments = ((SingleFunctionNode) node).arguments;
+        if(node instanceof FunctionNode) {
+            Node[] arguments = ((FunctionNode) node).arguments;
 
             for(int index = 0; index < arguments.length; ++index) {
                 arguments[index] = collapseConstants(arguments[index]);
@@ -236,11 +236,11 @@ public class SimpleOptimiser extends Optimiser {
 
         Node[] arguments;
 
-        if(node instanceof SingleFunctionNode) {
-            if(!((SingleFunctionNode) node).function.getOptimiseOptions().isPure)
+        if(node instanceof FunctionNode) {
+            if(!((FunctionNode) node).function.getOptimiseOptions().isPure)
                 return false;
 
-            arguments = ((SingleFunctionNode) node).arguments;
+            arguments = ((FunctionNode) node).arguments;
         } else if(node instanceof MultiFunctionNode) {
             arguments = ((MultiFunctionNode) node).arguments;
         } else {
@@ -262,10 +262,10 @@ public class SimpleOptimiser extends Optimiser {
      *      ((a * b) * (c * d)) -> (a * b * c * d)
      */
     protected Node placeMultiFunctions(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = (FunctionNode) node;
+        AbstractFunctionNode functionNode = (AbstractFunctionNode) node;
         Function function = functionNode.getFunction();
 
         if(!(function instanceof TwoArgFunction) || function.getOptimiseOptions().isOrderDependant) {
@@ -289,7 +289,7 @@ public class SimpleOptimiser extends Optimiser {
                 continue;
             }
 
-            Collections.addAll(nodeQueue, ((FunctionNode) argument).getArguments());
+            Collections.addAll(nodeQueue, ((AbstractFunctionNode) argument).getArguments());
         }
 
         for(int index = 0; index < arguments.size(); ++index) {
@@ -308,11 +308,11 @@ public class SimpleOptimiser extends Optimiser {
      *      (a * (1.0 / b) * c * (1.0 / d)) -> ((a * c) / (b * d))
      */
     protected Node collectDivides(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
         { // Recursively run this for every child of this node.
-            Node[] arguments = ((FunctionNode) node).getArguments();
+            Node[] arguments = ((AbstractFunctionNode) node).getArguments();
 
             for(int index = 0; index < arguments.length; ++index) {
                 arguments[index] = collectDivides(arguments[index]);
@@ -328,7 +328,7 @@ public class SimpleOptimiser extends Optimiser {
         List<Node> denominator = new ArrayList<>(); {
             for(Node argument : functionNode.getArguments()) {
                 if(isFunction(argument, Divide.fn)) {
-                    Node[] arguments = ((FunctionNode) argument).getArguments();
+                    Node[] arguments = ((AbstractFunctionNode) argument).getArguments();
 
                     if(isConstantOfValue(arguments[0], 1.0)) {
                         denominator.add(arguments[1]);
@@ -367,7 +367,7 @@ public class SimpleOptimiser extends Optimiser {
             numeratorNode = new MultiFunctionNode(Multiply.fn, nodes);
         }
 
-        return new SingleFunctionNode(Divide.fn, numeratorNode, denominatorNode);
+        return new FunctionNode(Divide.fn, numeratorNode, denominatorNode);
     }
 
     /**
@@ -381,10 +381,10 @@ public class SimpleOptimiser extends Optimiser {
      *      (a / (b / c)) -> ((1 / ((1 / c) * b)) * a)
      */
     protected Node transformDivides(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = (FunctionNode) node;
+        AbstractFunctionNode functionNode = (AbstractFunctionNode) node;
         Function function = functionNode.getFunction();
         Node[] arguments = functionNode.getArguments();
 
@@ -404,9 +404,9 @@ public class SimpleOptimiser extends Optimiser {
          *   -> (c * ((1.0 / b) * a))
          */
         if(isFunction(arguments[1], Divide.fn)) {
-            FunctionNode divide = (FunctionNode) arguments[1];
+            AbstractFunctionNode divide = (AbstractFunctionNode) arguments[1];
 
-            SingleFunctionNode multiply = new SingleFunctionNode(Multiply.fn, divide.getArguments()[1], node);
+            FunctionNode multiply = new FunctionNode(Multiply.fn, divide.getArguments()[1], node);
             arguments[1] = divide.getArguments()[0];
 
             return transformDivides(multiply);
@@ -418,7 +418,7 @@ public class SimpleOptimiser extends Optimiser {
         if(isConstantOfValue(arguments[0], 1.0))
             return node;
 
-        SingleFunctionNode multiply = new SingleFunctionNode(Multiply.fn, node, arguments[0]);
+        FunctionNode multiply = new FunctionNode(Multiply.fn, node, arguments[0]);
         arguments[0] = new ConstantNode(1.0);
 
         return multiply;
@@ -432,10 +432,10 @@ public class SimpleOptimiser extends Optimiser {
      * e.g. (a - 2) -> (a + (-2))
      */
     protected Node transformSubtractions(Node node) {
-        if(!(node instanceof FunctionNode))
+        if(!(node instanceof AbstractFunctionNode))
             return node;
 
-        FunctionNode functionNode = (FunctionNode) node;
+        AbstractFunctionNode functionNode = (AbstractFunctionNode) node;
         Function function = functionNode.getFunction();
         Node[] arguments = functionNode.getArguments();
 
@@ -452,14 +452,14 @@ public class SimpleOptimiser extends Optimiser {
 
         arguments[1] = new ConstantNode((-1) * arguments[1].evaluate(new double[0]));
 
-        return new SingleFunctionNode(Add.fn, arguments);
+        return new FunctionNode(Add.fn, arguments);
     }
 
     /**
      * If {@param node} is a FunctionNode with function {@param function}.
      */
     private static boolean isFunction(Node node, Function function) {
-        return (node instanceof FunctionNode && ((FunctionNode) node).getFunction() == function);
+        return (node instanceof AbstractFunctionNode && ((AbstractFunctionNode) node).getFunction() == function);
     }
 
     /**

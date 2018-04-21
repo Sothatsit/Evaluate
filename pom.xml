@@ -28,7 +28,7 @@
         <dependency>
             <groupId>net.benmann</groupId>
             <artifactId>evald</artifactId>
-            <version>12</version>
+            <version>16</version>
         </dependency>
     </dependencies>
 </project>

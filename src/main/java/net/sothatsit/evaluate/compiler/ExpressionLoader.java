@@ -1,8 +1,10 @@
 package net.sothatsit.evaluate.compiler;
 
-import net.sothatsit.evaluate.tree.Expression;
 import net.sothatsit.evaluate.tree.function.Function;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 
@@ -21,11 +23,27 @@ public class ExpressionLoader extends ClassLoader {
         return PACKAGE + "." + CLASS_NAME + "$" + counter;
     }
 
+    public void write(byte[] bytes) throws IOException {
+        File output = new File("/Users/159503/Desktop/compiled.class");
+
+        FileOutputStream fos = new FileOutputStream(output);
+
+        fos.write(bytes);
+        fos.flush();
+        fos.close();
+    }
+
     public CompiledExpression load(String name,
-                                   Expression expression,
-                                   int inputCount,
                                    List<Function> fields,
+                                   int inputCount,
+                                   int outputCount,
                                    byte[] bytes) {
+
+        try {
+            write(bytes);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         Class<?> loaded = defineClass(name, bytes, 0, bytes.length);
         Class<? extends CompiledExpression> clazz = loaded.asSubclass(CompiledExpression.class);
@@ -33,15 +51,15 @@ public class ExpressionLoader extends ClassLoader {
         try {
             Class<?>[] argumentTypes = new Class<?>[2 + fields.size()];
 
-            argumentTypes[0] = Expression.class;
+            argumentTypes[0] = int.class;
             argumentTypes[1] = int.class;
             for(int index = 0; index < fields.size(); ++index) {
                 argumentTypes[2 + index] = ExpressionCompiler.getFunctionReferenceClass(fields.get(index));
             }
 
             Object[] arguments = new Object[2 + fields.size()];
-            arguments[0] = expression;
-            arguments[1] = inputCount;
+            arguments[0] = inputCount;
+            arguments[1] = outputCount;
             System.arraycopy(fields.toArray(), 0, arguments, 2, fields.size());
 
             return clazz.getConstructor(argumentTypes).newInstance(arguments);

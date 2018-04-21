@@ -1,13 +1,11 @@
 package net.sothatsit.evaluate.parser;
 
+import net.sothatsit.evaluate.PrefixTree;
 import net.sothatsit.evaluate.optimiser.CompositeOptimiser;
 import net.sothatsit.evaluate.optimiser.Optimiser;
-import net.sothatsit.evaluate.tree.Expression;
-import net.sothatsit.evaluate.tree.ConstantNode;
-import net.sothatsit.evaluate.tree.SingleFunctionNode;
-import net.sothatsit.evaluate.tree.Node;
-import net.sothatsit.evaluate.tree.VariableNode;
+import net.sothatsit.evaluate.tree.*;
 import net.sothatsit.evaluate.tree.function.Function;
+import net.sothatsit.evaluate.tree.function.MathFunctions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,33 +20,37 @@ public class ExpressionParser {
         parser.addArgument("a");
         parser.addArgument("b");
         parser.addArgument("c");
-        parser.addArgument("d");
-        parser.addArgument("e");
-        parser.addArgument("f");
 
-        String equation = "a*b*c*d / a/b/c/d";
+        String equation = "sin(a + sin(b) + 1.2E-234)";
 
-        Node expression = parser.parseNode(equation);
+        Node expression;
+
+        try {
+            expression = parser.parseNode(new StringStream(equation));
+        } catch(ParseException e) {
+            e.printError();
+            return;
+        }
+
         System.out.println(expression);
 
-        Expression simplified = parser.parse(equation);
-        System.out.println(simplified);
-
         double[] inputs = new double[] {
-                Math.random(), Math.random(),
-                Math.random(), Math.random(),
-                Math.random(), Math.random()
+                Math.random(), Math.random(), Math.random()
         };
 
         System.out.println();
-        System.out.println(expression.evaluate(inputs) + " = " + simplified.evaluate(inputs));
+        System.out.println("if(" + inputs[0] + ", " + inputs[1] + ", " + inputs[2] + ")" +
+                           " = " + expression.evaluate(inputs));
     }
 
     private final Optimiser optimiser;
 
     private final Map<String, Function> functions = new HashMap<>();
     private final Map<String, Double> constants = new HashMap<>();
+    private final PrefixTree<Operator> operators = new PrefixTree<>();
     private final List<String> arguments = new ArrayList<>();
+
+    private final Map<String, Node> intermediateVariables = new HashMap<>();
 
     public ExpressionParser() {
         this(CompositeOptimiser.all());
@@ -56,6 +58,9 @@ public class ExpressionParser {
 
     public ExpressionParser(Optimiser optimiser) {
         this.optimiser = optimiser;
+
+        addFunctions(MathFunctions.all());
+        addOperators(Operator.all());
     }
 
     public int addArgument(String name) {
@@ -63,13 +68,6 @@ public class ExpressionParser {
         arguments.add(name);
 
         return index;
-    }
-
-    public int getArgumentIndex(String name) {
-        if(!arguments.contains(name))
-            throw new IllegalArgumentException("Unable to find the variable " + name);
-
-        return arguments.indexOf(name);
     }
 
     public void addFunction(Function function) {
@@ -90,288 +88,254 @@ public class ExpressionParser {
         constants.put(name, value);
     }
 
+    public void addOperator(Operator operator) {
+        operators.add(operator.getOperatorString(), operator);
+    }
+
+    public void addOperators(Operator... operators) {
+        for(Operator operator : operators) {
+            addOperator(operator);
+        }
+    }
+
+    public void addIntermediateVariable(String name, String equation) {
+        StringStream stream = new StringStream(equation);
+
+        intermediateVariables.put(name, parseNode(stream));
+    }
+
     public Expression parse(String equation) {
-        Expression expression = new Expression(parseNode(equation), arguments);
+        StringStream stream = new StringStream(equation);
+        Expression expression = new Expression(parseNode(stream), arguments);
 
         optimiser.optimise(expression);
 
         return expression;
     }
 
-    private Node parseNode(String equation) {
-        List<Token> tokens = tokenize(equation);
+    private Node parseNode(StringStream stream) {
+        int fromIndex = stream.getCurrentIndex();
+        List<Token> tokens = tokenize(stream);
+        int toIndex = stream.getCurrentIndex();
 
         if(tokens.size() == 0)
-            throw new IllegalArgumentException("Empty expression");
+            throw stream.error("Empty expression", fromIndex, toIndex);
 
         while(true) {
-            int operatorIndex = -1;
-            BaseOperator operator = null;
+            int index = findHighestPrecedence(tokens);
 
-            for(int index = 0; index < tokens.size(); ++index) {
-                Token token = tokens.get(index);
-
-                if(!token.isOperator())
-                    continue;
-
-                BaseOperator possibleOperator = token.getOperator();
-
-                if(operator == null || possibleOperator.precedence > operator.precedence) {
-                    operatorIndex = index;
-                    operator = possibleOperator;
-                }
-            }
-
-            if(operator == null)
+            // No more operators
+            if(index < 0)
                 break;
 
-            if(operatorIndex == 0 || operatorIndex == tokens.size() - 1)
-                throw new IllegalArgumentException("Operator must have two operands");
+            Token token = tokens.remove(index);
+            Operator operator = token.getOperator();
+            String operatorString = "\"" + operator.getOperatorString() + "\"";
 
-            Token left = tokens.get(operatorIndex - 1);
-            Token right = tokens.get(operatorIndex + 1);
+            Token[] arguments = new Token[operator.getArgumentCount()];
+            int argumentIndex = 0;
+            int insertIndex = index;
 
-            if(left.isOperator() || right.isOperator())
-                throw new IllegalArgumentException("Two adjacent operators");
+            if(operator.requiresRight()) {
+                if(index == tokens.size())
+                    throw token.error(stream, "Operator " + operatorString + " requires a value to its right");
 
-            SingleFunctionNode node = new SingleFunctionNode(operator.function, left.getNode(), right.getNode());
+                Token right = tokens.get(index);
 
-            tokens.remove(operatorIndex + 1);
-            tokens.remove(operatorIndex);
-            tokens.remove(operatorIndex - 1);
-            tokens.add(operatorIndex - 1, new Token.NodeToken(node));
+                if(right.isOperator())
+                    throw token.error(stream, "Operator " + operatorString + " requires a value to its right");
+
+                arguments[argumentIndex++] = tokens.remove(index);
+            }
+
+            if(operator.requiresLeft()) {
+                if(index == 0)
+                    throw token.error(stream, "Operator " + operatorString + " requires a value to its left");
+
+                Token left = tokens.get(index - 1);
+
+                if(left.isOperator())
+                    throw token.error(stream, "Operator " + operatorString + " requires a value to its left");
+
+                arguments[argumentIndex] = tokens.remove(index - 1);
+                insertIndex -= 1;
+            }
+
+            Token newToken = operator.getToken(token, arguments);
+            tokens.add(insertIndex, newToken);
         }
 
-        if(tokens.size() > 1)
-            throw new IllegalArgumentException("Missing operator");
+        if(tokens.size() > 1) {
+            int errorFromIndex = tokens.get(0).endIndex;
+            int errorToIndex = tokens.get(1).startIndex;
+
+            throw stream.error("Missing operator", errorFromIndex, errorToIndex);
+        }
 
         return tokens.get(0).getNode();
     }
 
-    private List<Token> tokenize(String equation) {
+    private int findHighestPrecedence(List<Token> tokens) {
+        int highestIndex = -1;
+        int highestPrecedence = -1;
+        boolean highestRequiresRightOnly = false;
+
+        for(int index = 0; index < tokens.size(); ++index) {
+            Token token = tokens.get(index);
+
+            if(!token.isOperator())
+                continue;
+
+            Operator operator = token.getOperator();
+            int precedence = operator.getPrecedence();
+
+            // We want to evaluate right-to-left if an operator requires only a right argument
+            if(precedence < highestPrecedence || (precedence == highestPrecedence && !highestRequiresRightOnly))
+                continue;
+
+            highestIndex = index;
+            highestPrecedence = operator.getPrecedence();
+            highestRequiresRightOnly = !operator.requiresLeft() && operator.requiresRight();
+        }
+
+        return highestIndex;
+    }
+
+    private List<Token> tokenize(StringStream stream) {
         List<Token> tokens = new ArrayList<>();
 
-        for(int index = 0; index < equation.length(); ++index) {
-            char character = equation.charAt(index);
+        while(stream.hasNext()) {
+            stream.consumeWhitespace();
 
-            if(character == '(') {
-                String brackets = extractBrackets(equation, index);
-                index += brackets.length() + 1;
+            if(!stream.hasNext())
+                break;
 
-                Node subExpression = parseNode(brackets);
+            char ch = stream.next();
 
-                tokens.add(new Token.NodeToken(subExpression));
+            // Brackets
+            if(ch == '(') {
+                tokens.add(parseBrackets(stream));
                 continue;
             }
 
-            if(isDigit(character)) {
-                String number = extractNumber(equation, index);
-
-                index += number.length();
-                index -= 1;
-
-                double value = Double.valueOf(number);
-                Node constant = new ConstantNode(value);
-
-                tokens.add(new Token.NodeToken(constant));
+            // Numbers
+            if('0' <= ch && ch <= '9') {
+                tokens.add(parseNumber(stream));
                 continue;
             }
 
-            if(isLetter(character)) {
-                String identifier = extractIdentifier(equation, index);
-
-                index += identifier.length();
-                index -= 1;
-
-                if(index + 1 < equation.length() && equation.charAt(index + 1) == '(') {
-                    index += 1;
-
-                    String brackets = extractBrackets(equation, index);
-                    Function function = functions.get(identifier);
-
-                    if(function == null)
-                        throw new IllegalArgumentException("Unknown function " + identifier);
-
-                    Node[] arguments = extractFunctionArguments(brackets);
-                    SingleFunctionNode node = new SingleFunctionNode(function, arguments);
-
-                    index += brackets.length();
-                    index += 1;
-
-                    tokens.add(new Token.NodeToken(node));
-                    continue;
-                }
-
-                if(constants.containsKey(identifier)) {
-                    double value = constants.get(identifier);
-                    Node constant = new ConstantNode(identifier, value);
-
-                    tokens.add(new Token.NodeToken(constant));
-                    continue;
-                }
-
-                int variableIndex = getArgumentIndex(identifier);
-
-                tokens.add(new Token.NodeToken(new VariableNode(identifier, variableIndex)));
-                continue;
-            }
-
-            BaseOperator operator = BaseOperator.find(character);
-
+            // Operators
+            Token operator = parseOperator(stream);
             if(operator != null) {
-                tokens.add(new Token.OperatorToken(operator));
+                tokens.add(operator);
                 continue;
             }
 
-            if(Character.isWhitespace(character))
+            // Functions, ifs, constants and variables
+            if(Character.isLetter(ch)) {
+                tokens.add(parseIdentifier(stream));
                 continue;
+            }
 
-            throw new IllegalArgumentException("Unexpected character " + character);
+            throw stream.error("Unexpected character \"" + ch + "\"");
         }
 
         return tokens;
     }
 
-    private Node[] extractFunctionArguments(String brackets) {
-        if(brackets.trim().length() == 0)
-            return new Node[0];
+    private Token parseOperator(StringStream stream) {
+        int fromIndex = stream.getCurrentIndex();
 
-        int depth = 0;
-        int splitFrom = 0;
+        PrefixTree<Operator> tree = operators;
 
-        List<Node> arguments = new ArrayList<>();
+        while(tree != null) {
+            char ch = stream.consume();
+            Operator operator = tree.get(ch);
 
-        for(int index = 0; index < brackets.length(); ++index) {
-            char character = brackets.charAt(index);
+            if(operator != null)
+                return Token.operator(operator, fromIndex, stream.getCurrentIndex());
 
-            if(character == '(') depth += 1;
-            if(character == ')') depth -= 1;
-
-            if(character == ',' && depth == 0) {
-                String argument = brackets.substring(splitFrom, index);
-                Node expression = parseNode(argument);
-
-                arguments.add(expression);
-
-                splitFrom = index + 1;
-            }
+            tree = tree.getSubTree(ch);
         }
 
-        String argument = brackets.substring(splitFrom);
-        Node expression = parseNode(argument);
-
-        arguments.add(expression);
-
-        return arguments.toArray(new Node[arguments.size()]);
+        stream.returnTo(fromIndex);
+        return null;
     }
 
-    private String extractIdentifier(String equation, int fromIndex) {
-        if(!isLetter(equation.charAt(fromIndex)))
-            throw new IllegalArgumentException("Expected letter (a-zA-Z)");
+    private Token parseBrackets(StringStream stream) {
+        int fromIndex = stream.getCurrentIndex();
+        StringStream brackets = stream.consumeBrackets();
+        int toIndex = stream.getCurrentIndex();
 
-        int index;
+        return Token.node(parseNode(brackets), fromIndex, toIndex);
+    }
 
-        for(index = fromIndex + 1; index < equation.length(); ++index) {
-            char character = equation.charAt(index);
+    private Token parseNumber(StringStream stream) {
+        int fromIndex = stream.getCurrentIndex();
+        double number = stream.consumeNumber();
+        int toIndex = stream.getCurrentIndex();
 
-            if(isLetter(character) || isDigit(character) || character == '_')
-                continue;
+        return Token.constant(number, fromIndex, toIndex);
+    }
 
-            break;
+    private Token parseIdentifier(StringStream stream) {
+        int fromIndex = stream.getCurrentIndex();
+        String identifier = stream.consumeIdentifier();
+        int toIndex = stream.getCurrentIndex();
+
+        // Functions and ifs
+        if(stream.hasNext() && stream.next() == '(')
+            return parseFunction(stream, fromIndex, identifier);
+
+        // Constants
+        if(constants.containsKey(identifier)) {
+            double value = constants.get(identifier);
+
+            return Token.constant(identifier, value, fromIndex, toIndex);
         }
 
-        return equation.substring(fromIndex, index);
-    }
+        // Intermediate variables
+        if(intermediateVariables.containsKey(identifier)) {
+            Node intermediate = intermediateVariables.get(identifier);
 
-    private String extractNumber(String equation, int fromIndex) {
-        if(!isDigit(equation.charAt(fromIndex)))
-            throw new IllegalArgumentException("Expected digit (0-9)");
-
-        int index;
-
-        boolean seenDecimalPoint = false;
-        boolean seenExponent = false;
-        boolean seenExponentDecimalPoint = false;
-
-        for(index = fromIndex + 1; index < equation.length(); ++index) {
-            char character = equation.charAt(index);
-
-            if(isDigit(character))
-                continue;
-
-            if(character == '.') {
-                if(!seenExponent) {
-                    if(seenDecimalPoint)
-                        throw new IllegalArgumentException("Unexpected decimal point");
-
-                    seenDecimalPoint = true;
-                    continue;
-                } else {
-                    if(seenExponentDecimalPoint)
-                        throw new IllegalArgumentException("Unexpected decimal point");
-
-                    seenExponentDecimalPoint = true;
-                    continue;
-                }
-            }
-
-            if(character == 'e' || character == 'E') {
-                if(seenExponent)
-                    throw new IllegalArgumentException("Unexpected exponent");
-
-                seenExponent = true;
-                continue;
-            }
-
-            if(character == '+' || character == '-') {
-                char lastCharacter = equation.charAt(index - 1);
-
-                if(lastCharacter != 'e')
-                    break;
-
-                continue;
-            }
-
-            break;
+            return Token.node(intermediate, fromIndex, toIndex);
         }
 
-        // We don't want to include this e as it's probably being used as a constant.
-        if(equation.charAt(index - 1) == 'e') {
-            index -= 1;
+        // Input Variable
+        if(arguments.contains(identifier)) {
+            int varIndex = arguments.indexOf(identifier);
+
+            return Token.variable(identifier, varIndex, fromIndex, toIndex);
         }
 
-        return equation.substring(fromIndex, index);
+        throw stream.error("Unknown variable or constant \"" + identifier + "\"", fromIndex, toIndex);
     }
 
-    private String extractBrackets(String equation, int fromIndex) {
-        if(equation.charAt(fromIndex) != '(')
-            throw new IllegalArgumentException("Expected opening bracket");
+    private Token parseFunction(StringStream stream, int fromIndex, String identifier) {
+        StringStream[] argumentStrings = stream.consumeFunctionArguments();
+        int toIndex = stream.getCurrentIndex();
 
-        int depth = 1;
-
-        for(int index = fromIndex + 1; index < equation.length(); ++index) {
-            char character = equation.charAt(index);
-
-            if(character == '(') {
-                depth += 1;
-            }
-
-            if(character == ')') {
-                depth -= 1;
-
-                if(depth == 0)
-                    return equation.substring(fromIndex + 1, index);
-            }
+        Node[] arguments = new Node[argumentStrings.length];
+        for(int index = 0; index < arguments.length; ++index) {
+            arguments[index] = parseNode(argumentStrings[index]);
         }
 
-        throw new IllegalArgumentException("Expected closing bracket");
-    }
+        if(identifier.equals("if")) {
+            if(arguments.length != 3)
+                throw stream.error("if statements require 3 arguments", fromIndex, toIndex);
 
-    private static boolean isLetter(char character) {
-        return ('a' <= character && character <= 'z') || ('A' <= character && character <= 'Z');
-    }
+            return Token.ifStatement(arguments[0], arguments[1], arguments[2], fromIndex, toIndex);
+        }
 
-    private static boolean isDigit(char character) {
-        return '0' <= character && character <= '9';
+        Function function = functions.get(identifier);
+
+        if(function == null)
+            throw stream.error("Unknown function " + identifier, fromIndex, toIndex);
+
+        try {
+            return Token.function(function, arguments, fromIndex, toIndex);
+        } catch(IllegalArgumentException e) {
+            throw stream.error(e.getMessage(), fromIndex, toIndex);
+        }
     }
 }

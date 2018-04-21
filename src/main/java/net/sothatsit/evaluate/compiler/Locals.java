@@ -108,7 +108,7 @@ public class Locals {
     }
 
     public void storeDoubleTemporary(int index) {
-        if(index < doubleTemporaries.size()) {
+        if(index >= doubleTemporaries.size()) {
             if(index != doubleTemporaries.size()) {
                 throw new IllegalArgumentException(
                         "Temporaries must be created in order. " +

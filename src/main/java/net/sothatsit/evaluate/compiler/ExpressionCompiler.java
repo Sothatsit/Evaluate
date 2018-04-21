@@ -1,7 +1,6 @@
 package net.sothatsit.evaluate.compiler;
 
 import jdk.internal.org.objectweb.asm.ClassWriter;
-import jdk.internal.org.objectweb.asm.MethodVisitor;
 import static jdk.internal.org.objectweb.asm.Opcodes.*;
 
 import jdk.internal.org.objectweb.asm.Type;
@@ -13,27 +12,54 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class ExpressionCompiler {
 
-    private static final String EXPRESSION_TYPE_DESC = "L" + Type.getInternalName(Expression.class) + ";";
     private final ExpressionLoader loader = new ExpressionLoader();
+    private final List<Expression> outputs = new ArrayList<>();
 
-    protected static Class<?> getFunctionReferenceClass(Function function) {
-        if(function instanceof ThreeArgFunction)
-            return ThreeArgFunction.class;
+    public int addOutput(Expression expression) {
+        outputs.add(expression);
 
-        if(function instanceof TwoArgFunction)
-            return TwoArgFunction.class;
+        Collections.sort(outputs);
 
-        if(function instanceof OneArgFunction)
-            return OneArgFunction.class;
-
-        else return Function.class;
+        return outputs.size() - 1;
     }
 
-    private static String getFunctionDesc(Function function) {
-        return "L" + Type.getInternalName(getFunctionReferenceClass(function)) + ";";
+    public int getInputCount() {
+        int max = 0;
+        for(Expression expression : outputs) {
+            max = Math.max(max, expression.getArgumentCount());
+        }
+        return max;
     }
 
-    public CompiledExpression compile(Expression expression) {
+    private List<Function> findNeededFunctionReferences() {
+        Set<Function> necessary = new HashSet<>();
+        { // Find all the external functions that the expression uses
+            Queue<Node> toCheck = new LinkedBlockingQueue<>();
+
+            for(Expression expression : outputs) {
+                toCheck.add(expression.root);
+            }
+
+            while(!toCheck.isEmpty()) {
+                Node node = toCheck.poll();
+
+                if(!(node instanceof AbstractFunctionNode))
+                    continue;
+
+                AbstractFunctionNode functionNode = (AbstractFunctionNode) node;
+                Collections.addAll(toCheck, functionNode.getArguments());
+
+                if(functionNode.getFunction() instanceof Compilable)
+                    continue;
+
+                necessary.add(functionNode.getFunction());
+            }
+        }
+
+        return new ArrayList<>(necessary);
+    }
+
+    public CompiledExpression compile() {
         String name = loader.getNextName();
         ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
 
@@ -41,151 +67,127 @@ public class ExpressionCompiler {
         String classSuper = Type.getInternalName(CompiledExpression.class);
         cw.visit(V1_8, ACC_PUBLIC, className, null, classSuper, null);
 
-        Set<Function> unorderedFields = new HashSet<>();
-        { // Find all the external functions that the expression uses
-            Queue<Node> toCheck = new LinkedBlockingQueue<>();
-            toCheck.add(expression.root);
-
-            while(!toCheck.isEmpty()) {
-                Node node = toCheck.poll();
-
-                if(!(node instanceof FunctionNode))
-                    continue;
-
-                FunctionNode functionNode = (FunctionNode) node;
-                Collections.addAll(toCheck, functionNode.getArguments());
-
-                if(functionNode.getFunction() instanceof Compilable)
-                    continue;
-
-                unorderedFields.add(functionNode.getFunction());
+        List<Function> fields = findNeededFunctionReferences();
+        { // Fields
+            for(Function function : fields) {
+                cw.visitField(ACC_PRIVATE | ACC_FINAL, function.getName(), getFunctionDesc(function), null, null).visitEnd();
             }
-        }
-        List<Function> fields = new ArrayList<>(unorderedFields);
-
-        cw.visitField(ACC_PRIVATE, "inputs", "[D", null, null).visitEnd();
-        for(Function function : fields) {
-            cw.visitField(ACC_PRIVATE, function.getName(), getFunctionDesc(function), null, null).visitEnd();
         }
 
         { // Constructor
-            StringBuilder desc = new StringBuilder();
+            Class<?>[] parameterTypes = new Class<?>[2 + fields.size()];
             {
-                desc.append("(");
-                desc.append(EXPRESSION_TYPE_DESC);
-                desc.append("I");
-
-                for(Function function : fields) {
-                    desc.append(getFunctionDesc(function));
+                parameterTypes[0] = int.class;
+                parameterTypes[1] = int.class;
+                for(int index = 0; index < fields.size(); ++index) {
+                    parameterTypes[2 + index] = getFunctionReferenceClass(fields.get(index));
                 }
-
-                desc.append(")V");
             }
 
-            MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "<init>", desc.toString(), null, null);
+            MethodCompiler mc = MethodCompiler.begin(cw, className, void.class, "<init>", parameterTypes);
 
-            mv.visitVarInsn(ALOAD, 0);
-            mv.visitVarInsn(ALOAD, 1);
-            mv.visitVarInsn(ILOAD, 2);
-            mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "(" + EXPRESSION_TYPE_DESC + "I)V", false);
+            mc.loadThis();
+            mc.varInsn(ILOAD, 1);
+            mc.varInsn(ILOAD, 2);
+
+            mc.mv.visitMethodInsn(INVOKESPECIAL, classSuper, "<init>", "(II)V", false);
 
             for(int index = 0; index < fields.size(); ++index) {
                 Function function = fields.get(index);
 
-                mv.visitVarInsn(ALOAD, 0);
-                mv.visitVarInsn(ALOAD, 3 + index);
-                mv.visitFieldInsn(PUTFIELD, className, function.getName(), getFunctionDesc(function));
+                mc.loadThis();
+                mc.varInsn(ALOAD, 3 + index);
+                mc.storeField(function.getName(), getFunctionDesc(function));
             }
 
-            mv.visitInsn(RETURN);
-            mv.visitMaxs(0, 0);
-            mv.visitEnd();
+            mc.end();
         }
 
-        { // public double evaluate(double[] inputs);
-            MethodVisitor mv = cw.visitMethod(ACC_PUBLIC, "evaluate", "()D", null, null);
-            MethodCompiler mc = new MethodCompiler(className, mv);
+        { // public void evaluate():
+            MethodCompiler mc = MethodCompiler.begin(cw, className, void.class, "evaluate");
 
-            compileMethod(mc, expression.root);
+            compileMethod(mc);
 
-            mv.visitInsn(DRETURN);
-            mv.visitMaxs(0, 0);
-            mv.visitEnd();
+            mc.end();
         }
 
         cw.visitEnd();
 
-        return loader.load(name, expression, 2, fields, cw.toByteArray());
+        return loader.load(name, fields, getInputCount(), outputs.size(), cw.toByteArray());
     }
 
-    private void compileMethod(MethodCompiler mc, Node node) {
+    private void compileMethod(MethodCompiler mc) {
         Map<Node, Integer> subtreeFrequencies = new HashMap<>();
+        {
+            Queue<Node> toCheck = new LinkedBlockingQueue<>();
 
-        Queue<Node> toCheck = new LinkedBlockingQueue<>();
-        toCheck.add(node);
-
-        while(!toCheck.isEmpty()) {
-            Node check = toCheck.poll();
-            Integer count = subtreeFrequencies.get(check);
-
-            if(count == null) {
-                subtreeFrequencies.put(check, 1);
-            } else {
-                subtreeFrequencies.put(check, 1 + count);
+            for(Expression output : outputs) {
+                toCheck.add(output.root);
             }
 
-            if(check instanceof FunctionNode) {
-                Collections.addAll(toCheck, ((FunctionNode) check).getArguments());
+            while(!toCheck.isEmpty()) {
+                Node check = toCheck.poll();
+                Integer count = subtreeFrequencies.get(check);
+
+                if(count == null) {
+                    subtreeFrequencies.put(check, 1);
+
+                    if(check instanceof AbstractFunctionNode) {
+                        Collections.addAll(toCheck, ((AbstractFunctionNode) check).getArguments());
+                    }
+                } else {
+                    subtreeFrequencies.put(check, 1 + count);
+                }
             }
         }
 
-        List<VariableNode> variables = new ArrayList<>();
         List<Node> commonTerms = new ArrayList<>();
+        {
+            for(Map.Entry<Node, Integer> entry : subtreeFrequencies.entrySet()) {
+                if(entry.getKey() instanceof ConstantNode)
+                    continue;
 
-        for(Map.Entry<Node, Integer> entry : subtreeFrequencies.entrySet()) {
-            if(entry.getValue() == 1)
-                continue;
+                // It takes more uses of a variable to outweigh the cost of storing it as a local.
+                if(entry.getKey() instanceof VariableNode && entry.getValue() < 3)
+                    continue;
 
-            if(entry.getKey() instanceof VariableNode) {
-                variables.add((VariableNode) entry.getKey());
-            } else {
+                if(entry.getValue() < 2)
+                    continue;
+
                 commonTerms.add(entry.getKey());
             }
+
+            Collections.sort(commonTerms, new Node.NodeComparator(false));
         }
 
-        Collections.sort(variables, new Node.NodeComparator());
-        Collections.sort(commonTerms, new Node.NodeComparator(false));
-
         Map<Node, Integer> preComputedTerms = new HashMap<>();
+        {
+            for (Node term : commonTerms) {
+                visitNode(preComputedTerms, mc, term);
 
-        if(variables.size() > 0) {
-            mc.loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
+                int index = mc.locals.newDoubleVariable();
+                mc.locals.storeVariable(index);
+                preComputedTerms.put(term, index);
 
-            for(int index = 0; index < variables.size(); ++index) {
-                VariableNode term = variables.get(index);
-
-                if(index != variables.size() - 1) {
-                    mc.insn(DUP);
-                }
-
-                mc.loadConstant(term.index);
-                mc.insn(DALOAD);
-
-                int variableIndex = mc.locals.newDoubleVariable();
-                mc.locals.storeVariable(variableIndex);
-                preComputedTerms.put(term, variableIndex);
+                // System.err.println("Pre-computed " + term);
             }
         }
 
-        for (Node term : commonTerms) {
-            visitNode(preComputedTerms, mc, term);
+        for(int index = 0; index < outputs.size(); ++index) {
+            Expression output = outputs.get(index);
 
-            int index = mc.locals.newDoubleVariable();
-            mc.locals.storeVariable(index);
-            preComputedTerms.put(term, index);
+            visitNode(preComputedTerms, mc, output.root);
+
+            mc.loadField(Type.getInternalName(CompiledExpression.class), "outputs", "[D");
+            mc.insn(DUP_X2);
+            mc.insn(POP);
+
+            mc.loadConstant(index);
+            mc.insn(DUP_X2);
+            mc.insn(POP);
+
+            mc.insn(DASTORE);
         }
-
-        visitNode(preComputedTerms, mc, node);
     }
 
     private void visitNode(Map<Node, Integer> preComputedTerms, MethodCompiler mc, Node node) {
@@ -204,7 +206,7 @@ public class ExpressionCompiler {
             return;
         }
 
-        SingleFunctionNode functionNode = (SingleFunctionNode) node;
+        FunctionNode functionNode = (FunctionNode) node;
         Function function = functionNode.function;
         Node[] arguments = functionNode.arguments;
 
@@ -251,5 +253,22 @@ public class ExpressionCompiler {
         } else {
             mc.method(Function.class, "evaluate", double[].class);
         }
+    }
+
+    protected static Class<?> getFunctionReferenceClass(Function function) {
+        if(function instanceof ThreeArgFunction)
+            return ThreeArgFunction.class;
+
+        if(function instanceof TwoArgFunction)
+            return TwoArgFunction.class;
+
+        if(function instanceof OneArgFunction)
+            return OneArgFunction.class;
+
+        else return Function.class;
+    }
+
+    private static String getFunctionDesc(Function function) {
+        return "L" + Type.getInternalName(getFunctionReferenceClass(function)) + ";";
     }
 }

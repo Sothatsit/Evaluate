@@ -105,17 +105,15 @@ public class Benchmark {
     public String toString() {
         StringBuilder builder = new StringBuilder();
 
-        TestCase firstTestCase = testCases.get(0);
-        double overallMin = firstTestCase.stats.getMin();
-        double overallMax = firstTestCase.stats.getMax();
+        double overallMin = 0;
+        double overallMax = 0;
 
-        for(int index = 1; index < testCases.size(); ++index) {
-            TestCase testCase = testCases.get(index);
+        for (TestCase testCase : testCases) {
             double min = testCase.stats.getMin();
             double max = testCase.stats.getMax();
 
-            if(min < overallMin) overallMin = min;
-            if(max > overallMax) overallMax = max;
+            if (min < overallMin) overallMin = min;
+            if (max > overallMax) overallMax = max;
         }
 
         for(TestCase testCase : testCases) {

@@ -1,10 +1,8 @@
 package net.sothatsit.evaluate.optimiser;
 
-import net.sothatsit.evaluate.optimiser.OptimiseOptions;
-import net.sothatsit.evaluate.parser.BaseOperator;
-import net.sothatsit.evaluate.tree.FunctionNode;
+import net.sothatsit.evaluate.tree.AbstractFunctionNode;
 import net.sothatsit.evaluate.tree.Node;
-import net.sothatsit.evaluate.tree.SingleFunctionNode;
+import net.sothatsit.evaluate.tree.FunctionNode;
 import net.sothatsit.evaluate.tree.function.Function;
 import net.sothatsit.evaluate.tree.function.TwoArgFunction;
 
@@ -14,7 +12,7 @@ import java.util.HashSet;
 /**
  * An intermediary node for use in optimisation.
  */
-public class MultiFunctionNode extends FunctionNode {
+public class MultiFunctionNode extends AbstractFunctionNode {
 
     public final TwoArgFunction function;
     public Node[] arguments;
@@ -63,10 +61,10 @@ public class MultiFunctionNode extends FunctionNode {
 
     @Override
     public boolean equals(Object obj) {
-        if(!(obj instanceof SingleFunctionNode))
+        if(!(obj instanceof FunctionNode))
             return false;
 
-        SingleFunctionNode other = (SingleFunctionNode) obj;
+        FunctionNode other = (FunctionNode) obj;
 
         if(function != other.function || arguments.length != other.arguments.length)
             return false;
@@ -79,9 +77,6 @@ public class MultiFunctionNode extends FunctionNode {
 
     @Override
     public String toString() {
-        if(BaseOperator.find(function) != null)
-            return BaseOperator.toString(this);
-
         StringBuilder builder = new StringBuilder();
 
         builder.append(function.getName());

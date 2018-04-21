@@ -1,5 +1,6 @@
 package net.sothatsit.evaluate.compiler;
 
+import jdk.internal.org.objectweb.asm.ClassVisitor;
 import jdk.internal.org.objectweb.asm.MethodVisitor;
 import jdk.internal.org.objectweb.asm.Type;
 
@@ -11,13 +12,62 @@ import static jdk.internal.org.objectweb.asm.Opcodes.*;
 public class MethodCompiler {
 
     public final String className;
+    public final Class<?> returnType;
+
     public final MethodVisitor mv;
     public final Locals locals;
 
-    public MethodCompiler(String className, MethodVisitor mv) {
+    private MethodCompiler(String className, Class<?> returnType, MethodVisitor mv) {
         this.className = className;
+        this.returnType = returnType;
+
         this.mv = mv;
         this.locals = new Locals(this);
+    }
+
+    private static String getDescriptor(Class<?> clazz) {
+        // Type.getDescriptor does not deal with primitive arrays correctly
+        if(clazz.isArray())
+            return "[" + getDescriptor(clazz.getComponentType());
+
+        return Type.getDescriptor(clazz);
+    }
+
+    public static MethodCompiler begin(ClassVisitor cv, String className,
+                                       Class<?> returnType, String methodName, Class<?>... parameterTypes) {
+
+        StringBuilder desc = new StringBuilder();
+        {
+            desc.append("(");
+            for(Class<?> parameter : parameterTypes) {
+                desc.append(getDescriptor(parameter));
+            }
+            desc.append(")");
+            desc.append(getDescriptor(returnType));
+        }
+
+        MethodVisitor mv = cv.visitMethod(ACC_PUBLIC, methodName, desc.toString(), null, null);
+
+        return new MethodCompiler(className, returnType, mv);
+    }
+
+    public void end() {
+        if(returnType.equals(int.class)) {
+            mv.visitInsn(IRETURN);
+        } else if(returnType.equals(long.class)) {
+            mv.visitInsn(LRETURN);
+        } else if(returnType.equals(float.class)) {
+            mv.visitInsn(FRETURN);
+        } else if(returnType.equals(double.class)) {
+            mv.visitInsn(DRETURN);
+        } else if(returnType.equals(void.class)) {
+            mv.visitInsn(RETURN);
+        } else {
+            mv.visitInsn(ARETURN);
+        }
+
+        mv.visitMaxs(0, 0);
+        mv.visitEnd();
     }
 
     //
@@ -52,6 +102,10 @@ public class MethodCompiler {
         insn(DDIV);
     }
 
+    public void remainder() {
+        insn(DREM);
+    }
+
     public void perform(Compilable function) {
         function.compile(this);
     }
@@ -70,14 +124,14 @@ public class MethodCompiler {
     // OBJECTS
     //
 
+    public void loadThis() {
+        varInsn(ALOAD, 0);
+    }
+
     public void loadArgument(int argumentIndex) {
         loadField(Type.getInternalName(CompiledExpression.class), "inputs", "[D");
         loadConstant(argumentIndex);
         insn(DALOAD);
-    }
-
-    public void loadThis() {
-        varInsn(ALOAD, 0);
     }
 
     public void loadField(String name, String desc) {
@@ -87,6 +141,15 @@ public class MethodCompiler {
     public void loadField(String className, String name, String desc) {
         loadThis();
         mv.visitFieldInsn(GETFIELD, className, name, desc);
+    }
+
+    public void storeField(String name, String desc) {
+        storeField(className, name, desc);
+    }
+
+    public void storeField(String className, String name, String desc) {
+        loadThis();
+        mv.visitFieldInsn(PUTFIELD, className, name, desc);
     }
 
     public void staticMethod(Class<?> clazz, String name, int argumentCount) {

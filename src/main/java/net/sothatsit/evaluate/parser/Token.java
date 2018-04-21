@@ -1,53 +1,83 @@
 package net.sothatsit.evaluate.parser;
 
-import net.sothatsit.evaluate.tree.Node;
+import net.sothatsit.evaluate.tree.*;
+import net.sothatsit.evaluate.tree.function.Function;
 
-public interface Token {
+public class Token {
 
-    public boolean isNode();
-    public boolean isOperator();
+    private final Node node;
+    private final Operator operator;
 
-    public Node getNode();
-    public BaseOperator getOperator();
+    public final int startIndex;
+    public final int endIndex;
 
-    public static class NodeToken implements Token {
+    public Token(Node node, int startIndex, int endIndex) {
+        this.node = node;
+        this.operator = null;
 
-        public final Node node;
-
-        public NodeToken(Node node) {
-            this.node = node;
-        }
-
-        public boolean isNode()     { return true;  }
-        public boolean isOperator() { return false; }
-
-        public Node getNode() {
-            return node;
-        }
-
-        public BaseOperator getOperator() {
-            throw new UnsupportedOperationException("This is not an operator token");
-        }
+        this.startIndex = startIndex;
+        this.endIndex = endIndex;
     }
 
-    public static class OperatorToken implements Token {
+    public Token(Operator operator, int startIndex, int endIndex) {
+        this.node = null;
+        this.operator = operator;
 
-        public final BaseOperator operator;
-
-        public OperatorToken(BaseOperator operator) {
-            this.operator = operator;
-        }
-
-        public boolean isNode()     { return false;  }
-        public boolean isOperator() { return true; }
-
-        public Node getNode() {
-            throw new UnsupportedOperationException("This is not a node token");
-        }
-
-        public BaseOperator getOperator() {
-            return operator;
-        }
+        this.startIndex = startIndex;
+        this.endIndex = endIndex;
     }
 
+    public ParseException error(StringStream stream, String reason) {
+        return stream.error(reason, startIndex, endIndex);
+    }
+
+    public boolean isNode() {
+        return node != null;
+    }
+
+    public boolean isOperator() {
+        return operator != null;
+    }
+
+    public Node getNode() {
+        if(node == null)
+            throw new UnsupportedOperationException("This token does not contain a node");
+
+        return node;
+    }
+
+    public Operator getOperator() {
+        if(operator == null)
+            throw new UnsupportedOperationException("This token does not contain an operator");
+
+        return operator;
+    }
+
+    public static Token node(Node node, int startIndex, int endIndex) {
+        return new Token(node, startIndex, endIndex);
+    }
+
+    public static Token ifStatement(Node condition, Node thenNode, Node elseNode, int startIndex, int endIndex) {
+        return new Token(new IfNode(condition, thenNode, elseNode), startIndex, endIndex);
+    }
+
+    public static Token function(Function function, Node[] arguments, int startIndex, int endIndex) {
+        return new Token(new FunctionNode(function, arguments), startIndex, endIndex);
+    }
+
+    public static Token operator(Operator operator, int startIndex, int endIndex) {
+        return new Token(operator, startIndex, endIndex);
+    }
+
+    public static Token variable(String name, int varIndex, int startIndex, int endIndex) {
+        return new Token(new VariableNode(name, varIndex), startIndex, endIndex);
+    }
+
+    public static Token constant(double value, int startIndex, int endIndex) {
+        return new Token(new ConstantNode(value), startIndex, endIndex);
+    }
+
+    public static Token constant(String name, double value, int startIndex, int endIndex) {
+        return new Token(new ConstantNode(name, value), startIndex, endIndex);
+    }
 }

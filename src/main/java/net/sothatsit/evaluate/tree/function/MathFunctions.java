@@ -7,16 +7,17 @@ import static jdk.internal.org.objectweb.asm.Opcodes.*;
 
 public class MathFunctions {
 
-    public static Function[] get() {
+    public static Function[] all() {
         return new Function[] {
-                Add.fn, Subtract.fn, Multiply.fn, Divide.fn,
+                Add.fn, Subtract.fn, Multiply.fn,
+                Divide.fn, Remainder.fn, Power.fn,
 
                 sin, cos, tan,
                 sinh, cosh, tanh,
                 asin, acos, atan, atan2,
                 csc, sec, cot,
 
-                sqrt, Power.fn,
+                sqrt,
                 ln, log2, log10,
                 sign, abs,
 

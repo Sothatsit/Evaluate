@@ -1,9 +1,12 @@
 package net.sothatsit.evaluate.tree;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
-public class Expression {
+public class Expression implements Comparable<Expression> {
+
+    private static final Comparator<Node> comparator = new Node.NodeComparator(true);
 
     public Node root;
     public final List<String> arguments;
@@ -31,5 +34,10 @@ public class Expression {
     @Override
     public String toString() {
         return root.toString();
+    }
+
+    @Override
+    public int compareTo(Expression other) {
+        return comparator.compare(root, other.root);
     }
 }
